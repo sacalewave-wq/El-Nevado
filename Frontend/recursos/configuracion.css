@@ -587,3 +587,17 @@ body.page-configuracion {
         align-items: flex-start;
     }
 }
+
+/* Configuración en solo lectura (RH) */
+.configuration-header .readonly-note {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #b45309;
+}
+
+.form-field input:disabled,
+.form-field select:disabled {
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: not-allowed;
+}

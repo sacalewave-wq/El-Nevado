@@ -7,6 +7,8 @@
     <title>Inicio | Distribuidora El Nevado</title>
     <link rel="stylesheet" href="recursos/main.css">
     <link rel="stylesheet" href="recursos/inicio.css">
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body>
@@ -63,7 +65,7 @@
                 <span class="badge badge--success">Operativo</span>
             </div>
             <div class="header__right">
-                <div class="header-date">Miércoles, 23 de septiembre de 2026</div>
+                <div class="header-date" id="fecha-hoy"></div>
                 <button class="btn-notification">🔔</button>
             </div>
         </header>
@@ -85,7 +87,7 @@
                         <span>Asistieron / Total</span>
                         <span class="kpi-icon success">✓</span>
                     </div>
-                    <div class="kpi-card__value success" id="valor-presentes">0 / 0</div>
+                    <div class="kpi-card__value asistencia" id="valor-presentes">0 / 0</div>
                 </div>
 
                 <div class="kpi-card" id="kpi-retardos" onclick="mostrarTabla('retardos')">
@@ -93,7 +95,7 @@
                         <span>Retardos</span>
                         <span class="kpi-icon warning">⏰</span>
                     </div>
-                    <div class="kpi-card__value warning" id="valor-retardos">0</div>
+                    <div class="kpi-card__value retardo" id="valor-retardos">0</div>
                 </div>
 
                 <div class="kpi-card" id="kpi-faltas" onclick="mostrarTabla('faltas')">
@@ -101,23 +103,23 @@
                         <span>Faltas</span>
                         <span class="kpi-icon danger">✗</span>
                     </div>
-                    <div class="kpi-card__value danger" id="valor-faltas">0</div>
+                    <div class="kpi-card__value falta" id="valor-faltas">0</div>
                 </div>
 
                 <div class="kpi-card" id="kpi-incapacidades" onclick="mostrarTabla('incapacidades')">
                     <div class="kpi-card__header">
                         <span>Incapacidades</span>
-                        <span class="kpi-icon warning">🏥</span>
+                        <span class="kpi-icon incapacidad">🏥</span>
                     </div>
-                    <div class="kpi-card__value warning" id="valor-incapacidades">0</div>
+                    <div class="kpi-card__value incapacidad" id="valor-incapacidades">0</div>
                 </div>
 
                 <div class="kpi-card" id="kpi-vacaciones" onclick="mostrarTabla('vacaciones')">
                     <div class="kpi-card__header">
                         <span>Vacaciones</span>
-                        <span class="kpi-icon info">📅</span>
+                        <span class="kpi-icon vacaciones">📅</span>
                     </div>
-                    <div class="kpi-card__value info" id="valor-vacaciones">0</div>
+                    <div class="kpi-card__value vacaciones" id="valor-vacaciones">0</div>
                 </div>
 
             </div>
@@ -133,20 +135,6 @@
                         <div class="filtro-sucursal">
                             <label for="filtro-sucursal">Sucursal</label>
                             <select id="filtro-sucursal" onchange="actualizarVista()">
-                                <option value="todas">Ver todas</option>
-                                <option value="00">00 - Oficina central</option>
-                                <option value="01">01 - Colón</option>
-                                <option value="02">02 - Pacífico</option>
-                                <option value="03">03 - Torres</option>
-                                <option value="04">04 - Temoaya</option>
-                                <option value="05">05 - Atlacomulco</option>
-                                <option value="06">06 - Huixquilucan</option>
-                                <option value="07">07 - Sica Store Atlacomulco</option>
-                                <option value="08">08 - Tenango</option>
-                                <option value="10">10 - Sica Store Mexicaltzingo</option>
-                                <option value="11">11 - Jilotepec</option>
-                                <option value="12">12 - San Pablo Autopan</option>
-                                <option value="13">13 - Santiago Tianguistenco</option>
                             </select>
                         </div>
                     </div>
@@ -163,59 +151,13 @@
     </main>
 
     <!-- ========== JAVASCRIPT ========== -->
+    <script src="recursos/datos.js"></script>
     <script>
-        // ---------- Datos ficticios de trabajadores (asistencia del día) ----------
-        // estado: presente | retardo | falta | incapacidad | vacaciones
-        const EMPLEADOS = [
-            { id: '0001', nombre: 'Juan Pérez López', suc: '00', depto: 'Director general', puesto: 'Director general', estado: 'presente', entrada: '07:52' },
-            { id: '0002', nombre: 'Gabriela Ortiz Ramírez', suc: '00', depto: 'Coordinación ventas', puesto: 'Coordinadora', estado: 'retardo', entrada: '08:31', retardo: 16 },
-            { id: '0003', nombre: 'Héctor Vargas Nava', suc: '00', depto: 'Coordinación sucursales', puesto: 'Coordinador', estado: 'presente', entrada: '07:58' },
-            { id: '0004', nombre: 'Patricia Luna Contreras', suc: '00', depto: 'Coordinación administrativo', puesto: 'Coordinadora', estado: 'presente', entrada: '08:05' },
-            { id: '0005', nombre: 'Eduardo Gómez Salinas', suc: '00', depto: 'RH', puesto: 'Admin de RRHH', estado: 'presente', entrada: '07:45' },
-            { id: '0006', nombre: 'Ana Morales Castillo', suc: '00', depto: 'Contabilidad', puesto: 'Contadora', estado: 'incapacidad', folio: 'IMSS-45821', periodo: '20 Sep - 27 Sep 2026' },
-            { id: '0007', nombre: 'Laura Medina Sánchez', suc: '00', depto: 'Facturación', puesto: 'Jefe de facturación', estado: 'presente', entrada: '08:02' },
-            { id: '0008', nombre: 'Carlos Jiménez Ruiz', suc: '00', depto: 'Facturación', puesto: 'Auxiliar de facturación', estado: 'presente', entrada: '08:10' },
-            { id: '0009', nombre: 'Sofía Reyes Domínguez', suc: '00', depto: 'Facturación', puesto: 'Becario', estado: 'falta', fecha: '23 Sep 2026' },
-            { id: '0010', nombre: 'Mariana Torres Aguilar', suc: '00', depto: 'Inventarios', puesto: 'Jefa de inventarios', estado: 'presente', entrada: '07:55' },
-            { id: '0011', nombre: 'Luis Hernández Mejía', suc: '00', depto: 'Inventarios', puesto: 'Auxiliar en inventarios', estado: 'vacaciones', dias: 6, periodo: '21 Sep - 26 Sep 2026' },
-            { id: '0012', nombre: 'Fernando Castro Molina', suc: '00', depto: 'Compras', puesto: 'Comprador', estado: 'presente', entrada: '08:00' },
-            { id: '0013', nombre: 'Ricardo Soto Hernández', suc: '00', depto: 'Logística', puesto: 'Encargado de logística', estado: 'retardo', entrada: '08:22', retardo: 7 },
-            { id: '0014', nombre: 'Daniel Rojas Pineda', suc: '00', depto: 'Sistemas', puesto: 'Jefe de departamento', estado: 'presente', entrada: '07:50' },
-            { id: '0015', nombre: 'Andrea Cruz Velázquez', suc: '00', depto: 'Sistemas', puesto: 'Empleado', estado: 'presente', entrada: '08:03' },
-            { id: '0016', nombre: 'Jorge Ramos Cabrera', suc: '00', depto: 'Sistemas', puesto: 'Becario', estado: 'presente', entrada: '08:12' },
-            { id: '0017', nombre: 'Raúl Mendoza Ortega', suc: '00', depto: 'Traileros de empresa', puesto: 'Trailero', estado: 'presente', entrada: '06:30' },
-            { id: '0101', nombre: 'Verónica Silva Guzmán', suc: '01', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '07:58' },
-            { id: '0102', nombre: 'Miguel Fuentes Reyes', suc: '01', depto: 'Almacenista', puesto: 'Almacenista', estado: 'vacaciones', dias: 7, periodo: '22 Sep - 30 Sep 2026' },
-            { id: '0103', nombre: 'Óscar Delgado Ríos', suc: '01', depto: 'Montacargista', puesto: 'Montacargista', estado: 'presente', entrada: '08:01' },
-            { id: '0201', nombre: 'Rosa Navarro Campos', suc: '02', depto: 'Admin general', puesto: 'Ayudante de admin', estado: 'retardo', entrada: '08:40', retardo: 25 },
-            { id: '0202', nombre: 'Alberto Peña Ibarra', suc: '02', depto: 'Operadores', puesto: 'Torton', estado: 'presente', entrada: '06:45' },
-            { id: '0301', nombre: 'Roberto Silva Guzmán', suc: '03', depto: 'Operadores', puesto: 'Rabón', estado: 'presente', entrada: '06:50' },
-            { id: '0302', nombre: 'Claudia Estrada León', suc: '03', depto: 'Ayudante general', puesto: 'Ayudante general', estado: 'falta', fecha: '23 Sep 2026' },
-            { id: '0401', nombre: 'Tomás Guerrero Paz', suc: '04', depto: 'Almacenista', puesto: 'Almacenista', estado: 'presente', entrada: '07:59' },
-            { id: '0402', nombre: 'Elena Figueroa Soto', suc: '04', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '08:04' },
-            { id: '0501', nombre: 'Diego Flores Martínez', suc: '05', depto: 'Montacargista', puesto: 'Montacargista', estado: 'falta', fecha: '23 Sep 2026' },
-            { id: '0502', nombre: 'Karla Medina Bautista', suc: '05', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '07:57' },
-            { id: '0601', nombre: 'Arturo Ponce Villa', suc: '06', depto: 'Operadores', puesto: 'Camionetas', estado: 'retardo', entrada: '08:28', retardo: 13 },
-            { id: '0602', nombre: 'Leticia Ávila Mora', suc: '06', depto: 'Ayudante general', puesto: 'Ayudante general', estado: 'presente', entrada: '08:00' },
-            { id: '0701', nombre: 'Brenda Salazar Cortés', suc: '07', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '08:06' },
-            { id: '0801', nombre: 'Iván Cárdenas Lara', suc: '08', depto: 'Almacenista', puesto: 'Almacenista', estado: 'incapacidad', folio: 'IMSS-46102', periodo: '18 Sep - 02 Oct 2026' },
-            { id: '0802', nombre: 'Norma Espinoza Téllez', suc: '08', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '07:54' },
-            { id: '1001', nombre: 'Samuel Rosas Quintero', suc: '10', depto: 'Ayudante general', puesto: 'Ayudante general', estado: 'presente', entrada: '08:09' },
-            { id: '1101', nombre: 'Adriana Montes Fierro', suc: '11', depto: 'Admin general', puesto: 'Admin general', estado: 'vacaciones', dias: 5, periodo: '22 Sep - 26 Sep 2026' },
-            { id: '1102', nombre: 'Pablo Serrano Durán', suc: '11', depto: 'Operadores', puesto: 'Torton', estado: 'presente', entrada: '06:40' },
-            { id: '1201', nombre: 'Julio Becerra Olvera', suc: '12', depto: 'Montacargista', puesto: 'Montacargista', estado: 'retardo', entrada: '08:35', retardo: 20 },
-            { id: '1202', nombre: 'Gloria Pacheco Rivas', suc: '12', depto: 'Almacenista', puesto: 'Almacenista', estado: 'incapacidad', folio: 'IMSS-46350', periodo: '22 Sep - 29 Sep 2026' },
-            { id: '1301', nombre: 'Manuel Ochoa Zamora', suc: '13', depto: 'Admin general', puesto: 'Admin general', estado: 'presente', entrada: '08:07' },
-            { id: '1302', nombre: 'Teresa Aguirre Luna', suc: '13', depto: 'Ayudante general', puesto: 'Ayudante general', estado: 'vacaciones', dias: 4, periodo: '23 Sep - 26 Sep 2026' }
-        ];
-
-        const BADGES = {
-            presente: '<span class="badge badge--success">Presente</span>',
-            retardo: '<span class="badge badge--warning">Retardo</span>',
-            falta: '<span class="badge badge--danger">Falta</span>',
-            incapacidad: '<span class="badge badge--warning">Activa</span>',
-            vacaciones: '<span class="badge badge--success">Autorizada</span>'
-        };
+        // Los datos salen de la misma fuente que Asistencia, Incapacidades y Vacaciones (recursos/datos.js),
+        // así las cifras de hoy coinciden en todas las páginas.
+        const etiqueta = (texto, concepto) => '<span class="badge color-' + concepto + '">' + texto + '</span>';
+        const aMinutos = (hora) => { const [h, m] = hora.split(':').map(Number); return h * 60 + m; };
+        const periodo = (inicio, fin) => inicio === fin ? formatoFecha(inicio) : formatoFecha(inicio) + ' – ' + formatoFecha(fin);
 
         const COLUMNAS_BASE = ['Empleado', 'Departamento'];
 
@@ -223,51 +165,62 @@
         function celdasBase(e) {
             return '<td>' +
                 '<div class="employee-cell">' +
-                '<span class="employee-id">' + e.id + '</span><span>' + e.nombre + '</span>' +
+                '<span class="employee-id">' + e.id + '</span><span>' + escaparHtml(e.nombre) + '</span>' +
                 '</div>' +
                 '</td>' +
-                '<td>' + e.depto + '</td>';
+                '<td>' + escaparHtml(e.depto) + '</td>';
         }
 
-        // Configuración de cada vista (KPI)
+        // Configuración de cada vista (KPI). Cada fila es { emp, reg, incapacidad, vacacion }
         const VISTAS = {
             presentes: {
                 titulo: 'Empleados Presentes Hoy',
-                filtro: e => e.estado === 'presente' || e.estado === 'retardo',
+                filtro: f => f.reg && (f.reg.estado === 'asistencia' || f.reg.estado === 'retardo'),
                 columnas: ['Hora de Entrada', 'Estado'],
-                celdas: e => '<td>' + e.entrada + '</td><td>' + BADGES[e.estado] + '</td>'
+                celdas: f => '<td>' + f.reg.entrada + '</td><td>' + (f.reg.estado === 'retardo' ? etiqueta('Retardo', 'retardo') : etiqueta('A tiempo', 'asistencia')) + '</td>'
             },
             retardos: {
                 titulo: 'Empleados con Retardo',
-                filtro: e => e.estado === 'retardo',
+                filtro: f => f.reg && f.reg.estado === 'retardo',
                 columnas: ['Hora de Entrada', 'Minutos de retardo', 'Estado'],
-                celdas: e => '<td>' + e.entrada + '</td><td>' + e.retardo + ' min</td><td>' + BADGES.retardo + '</td>'
+                celdas: f => '<td>' + f.reg.entrada + '</td><td>' + (aMinutos(f.reg.entrada) - HORARIO.entrada - TOLERANCIA_MINUTOS) + ' min</td><td>' + etiqueta('Retardo', 'retardo') + '</td>'
             },
             faltas: {
                 titulo: 'Empleados con Falta',
-                filtro: e => e.estado === 'falta',
+                filtro: f => f.reg && f.reg.estado === 'falta',
                 columnas: ['Fecha', 'Estado'],
-                celdas: e => '<td>' + e.fecha + '</td><td>' + BADGES.falta + '</td>'
+                celdas: () => '<td>' + formatoFecha(HOY_ISO) + '</td><td>' + etiqueta('Falta', 'falta') + '</td>'
             },
             incapacidades: {
                 titulo: 'Incapacidades Activas',
-                filtro: e => e.estado === 'incapacidad',
-                columnas: ['Folio IMSS', 'Periodo', 'Estado'],
-                celdas: e => '<td>' + e.folio + '</td><td>' + e.periodo + '</td><td>' + BADGES.incapacidad + '</td>'
+                filtro: f => Boolean(f.incapacidad),
+                columnas: ['Tipo', 'Folio IMSS', 'Periodo', 'Estado'],
+                celdas: f => '<td>' + escaparHtml(f.incapacidad.tipo) + '</td><td>' + escaparHtml(f.incapacidad.folio) + '</td><td>' +
+                    periodo(f.incapacidad.inicio, finIncapacidad(f.incapacidad)) + '</td><td>' + etiqueta('Incapacidad', 'incapacidad') + '</td>'
             },
             vacaciones: {
-                titulo: 'Solicitudes y Periodos de Vacaciones',
-                filtro: e => e.estado === 'vacaciones',
-                columnas: ['Días', 'Periodo Solicitado', 'Aprobado Por', 'Estado'],
-                celdas: e => '<td>' + e.dias + ' días</td><td>' + e.periodo + '</td><td>Eduardo Gómez (RRHH)</td><td>' + BADGES.vacaciones + '</td>'
+                titulo: 'Trabajadores de Vacaciones Hoy',
+                filtro: f => Boolean(f.vacacion),
+                columnas: ['Días', 'Periodo', 'Estado'],
+                celdas: f => { const dias = diasHabiles(f.vacacion.inicio, f.vacacion.fin); return '<td>' + dias + (dias === 1 ? ' día' : ' días') + '</td><td>' +
+                    periodo(f.vacacion.inicio, f.vacacion.fin) + '</td><td>' + etiqueta('Vacaciones', 'vacaciones') + '</td>'; }
             }
         };
 
         let vistaActual = 'presentes';
 
-        function empleadosPorSucursal() {
+        // Plantilla de hoy (contratados y sin baja) con su registro del día.
+        // Si alguien tiene incapacidad y vacaciones a la vez, cuenta como incapacidad (igual que en Empleados).
+        function filasDeHoy() {
             const sucursal = document.getElementById('filtro-sucursal').value;
-            return sucursal === 'todas' ? EMPLEADOS : EMPLEADOS.filter(e => e.suc === sucursal);
+            return EMPLEADOS
+                .filter(e => e.ingreso <= HOY_ISO && (!e.baja || e.baja.fecha >= HOY_ISO))
+                .filter(e => sucursal === 'todas' || e.suc === sucursal)
+                .sort((a, b) => a.id.localeCompare(b.id))
+                .map(emp => {
+                    const incapacidad = incapacidadEn(emp, HOY_ISO) || null;
+                    return { emp, reg: registroDia(emp, HOY), incapacidad, vacacion: incapacidad ? null : (vacacionEn(emp, HOY_ISO) || null) };
+                });
         }
 
         function actualizarKPIs(lista) {
@@ -279,7 +232,7 @@
         }
 
         function actualizarVista() {
-            const lista = empleadosPorSucursal();
+            const lista = filasDeHoy();
             const vista = VISTAS[vistaActual];
             // Siempre se muestra toda la información de la vista elegida
             const filas = lista.filter(vista.filtro);
@@ -295,7 +248,7 @@
                 '<tr>' + columnas.map(c => '<th>' + c + '</th>').join('') + '</tr>';
 
             document.getElementById('tabla-body').innerHTML = filas.length
-                ? filas.map(e => '<tr>' + celdasBase(e) + vista.celdas(e) + '</tr>').join('')
+                ? filas.map(f => '<tr>' + celdasBase(f.emp) + vista.celdas(f) + '</tr>').join('')
                 : '<tr class="fila-vacia"><td colspan="' + columnas.length + '">Sin registros para esta sucursal</td></tr>';
         }
 
@@ -313,6 +266,13 @@
 
         // Al cargar la página muestra "Presentes" por defecto
         document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('fecha-hoy').textContent = fechaLarga(HOY);
+            // El admin de sucursal solo ve la suya: el filtro queda fijo
+            const filtro = document.getElementById('filtro-sucursal');
+            const todas = puede('verTodasSucursales');
+            filtro.innerHTML = (todas ? '<option value="todas">Ver todas</option>' : '') +
+                listaSucursales().map(s => '<option value="' + s.clave + '">' + s.clave + ' - ' + escaparHtml(s.nombre) + '</option>').join('');
+            fijarSucursalUnica(filtro);
             mostrarTabla('presentes');
         });
     </script>

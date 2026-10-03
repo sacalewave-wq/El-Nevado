@@ -48,7 +48,7 @@
 }
 
 .kpi-card__value.incapacity {
-    color: #be185d;
+    color: var(--incapacidad-tx);
 }
 
 .kpi-card__footer {
@@ -191,12 +191,12 @@
 }
 
 .time-ok {
-    color: #16a34a;
+    color: var(--asistencia-tx);
     font-weight: 600;
 }
 
 .time-late {
-    color: #d97706;
+    color: var(--retardo-tx);
     font-weight: 600;
 }
 
@@ -243,8 +243,16 @@
 .status-dot.warning { background: #f59e0b; }
 .status-dot.danger { background: #ef4444; }
 .status-dot.info { background: #6366f1; }
-.status-dot.incapacity { background: #db2777; }
 .status-dot.muted { background: #cbd5e1; }
+
+/* Un punto por concepto, con los colores de recursos/main.css */
+.status-dot.asistencia { background: var(--asistencia-pt); }
+.status-dot.retardo { background: var(--retardo-pt); }
+.status-dot.falta { background: var(--falta-pt); }
+.status-dot.permiso { background: var(--permiso-pt); }
+.status-dot.incapacidad { background: var(--incapacidad-pt); }
+.status-dot.vacaciones { background: var(--vacaciones-pt); }
+.status-dot.descanso { background: var(--descanso-pt); }
 
 .pill {
     display: inline-block;

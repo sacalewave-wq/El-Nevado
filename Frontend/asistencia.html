@@ -8,8 +8,11 @@
     <link rel="stylesheet" href="recursos/main.css">
     <link rel="stylesheet" href="recursos/inicio.css">
     <link rel="stylesheet" href="recursos/asistencia.css">
+    <link rel="stylesheet" href="recursos/lista-asistencia.css">
     <!-- SheetJS: genera archivos de Excel (.xlsx) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body>
@@ -84,9 +87,14 @@
                 </div>
 
                 <div class="page-actions">
+                    <!-- Lista semanal de la sucursal en PDF: por ahora solo el admin -->
+                    <button id="listaAsistenciaBtn" class="btn btn--primary hidden" type="button">📋 Lista de asistencia (PDF)</button>
                     <button id="exportReporteBtn" class="btn btn--outline" type="button">↓ Exportar Reporte</button>
                 </div>
             </div>
+
+            <!-- Aviso: quién no ha checado hoy y reportes de falla de la checadora -->
+            <div class="checadas-alert hidden" id="checadasAlert"></div>
 
             <!-- KPI Cards de Asistencia -->
             <div class="kpi-grid kpi-grid--5">
@@ -95,7 +103,7 @@
                         <span>ASISTIERON / TOTAL</span>
                         <span class="kpi-icon success">👤</span>
                     </div>
-                    <div class="kpi-card__value success" id="kpiPresentes">0</div>
+                    <div class="kpi-card__value asistencia" id="kpiPresentes">0</div>
                     <div class="kpi-card__footer"><span id="kpiPresentesNota"></span></div>
                 </div>
 
@@ -104,7 +112,7 @@
                         <span>RETARDOS</span>
                         <span class="kpi-icon warning">⏰</span>
                     </div>
-                    <div class="kpi-card__value warning" id="kpiRetardos">0</div>
+                    <div class="kpi-card__value retardo" id="kpiRetardos">0</div>
                     <div class="kpi-card__footer"><span id="kpiRetardosNota">Llegaron después de las 08:15</span></div>
                 </div>
 
@@ -113,25 +121,25 @@
                         <span>FALTAS</span>
                         <span class="kpi-icon danger">✗</span>
                     </div>
-                    <div class="kpi-card__value danger" id="kpiFaltas">0</div>
+                    <div class="kpi-card__value falta" id="kpiFaltas">0</div>
                     <div class="kpi-card__footer"><span>Sin checada y sin justificación</span></div>
                 </div>
 
-                <div class="kpi-card" data-estado="permiso">
+                <div class="kpi-card" data-estado="vacaciones">
                     <div class="kpi-card__header">
-                        <span>PERMISOS</span>
-                        <span class="kpi-icon info">📝</span>
+                        <span>VACACIONES</span>
+                        <span class="kpi-icon vacaciones">🏖️</span>
                     </div>
-                    <div class="kpi-card__value info" id="kpiPermisos">0</div>
-                    <div class="kpi-card__footer"><span>Ausencia autorizada por RH</span></div>
+                    <div class="kpi-card__value vacaciones" id="kpiVacaciones">0</div>
+                    <div class="kpi-card__footer"><span id="kpiVacacionesNota">De vacaciones hoy</span></div>
                 </div>
 
                 <div class="kpi-card" data-estado="incapacidad">
                     <div class="kpi-card__header">
                         <span>INCAPACIDADES</span>
-                        <span class="kpi-icon info">🏥</span>
+                        <span class="kpi-icon incapacidad">🏥</span>
                     </div>
-                    <div class="kpi-card__value incapacity" id="kpiIncapacidades">0</div>
+                    <div class="kpi-card__value incapacidad" id="kpiIncapacidades">0</div>
                     <div class="kpi-card__footer"><span>Con certificado del IMSS</span></div>
                 </div>
             </div>
@@ -200,7 +208,7 @@
                                     </div>
                                     <div class="profile-item">
                                         <span>Horario</span>
-                                        <strong>L–V 08:00 – 17:00 · Sáb 08:00 – 14:00</strong>
+                                        <strong>L–V 08:00 – 18:00 · Sáb 08:00 – 14:00</strong>
                                     </div>
                                     <div class="profile-item profile-item--wide">
                                         <span>Hoy</span>
@@ -226,6 +234,23 @@
                             </div>
                         </section>
 
+                        <!-- Falla de la checadora: el admin reporta, RH captura, el Super usuario también corrige -->
+                        <section class="profile-card hours-card hidden" id="checadaCard">
+                            <h4 id="checadaTitle"></h4>
+                            <p class="checada-help" id="checadaHelp"></p>
+                            <div class="checada-form">
+                                <label>Fecha<input id="checadaFecha" type="date"></label>
+                                <label class="solo-captura">Entrada<input id="checadaEntrada" type="time" value="08:00"></label>
+                                <label class="solo-captura">Salida<input id="checadaSalida" type="time" value="18:00"></label>
+                                <label class="checada-motivo">Motivo<input id="checadaMotivo" type="text" maxlength="140" placeholder="Ej. La checadora no reconoció el rostro"></label>
+                            </div>
+                            <p class="checada-status" id="checadaStatus"></p>
+                            <p class="checada-error hidden" id="checadaError" role="alert"></p>
+                            <div class="checada-actions">
+                                <button class="btn btn--primary" id="checadaBtn" type="button"></button>
+                            </div>
+                        </section>
+
                         <section class="profile-card hours-card" id="detailIncidentsCard">
                             <h4>Incidencias registradas</h4>
                             <ul class="incident-list" id="detailIncidents"></ul>
@@ -240,6 +265,66 @@
 
         </section>
     </main>
+
+    <!-- Confirmación antes de corregir o capturar una checada -->
+    <div class="checada-modal hidden" id="confirmChecadaModal" role="dialog" aria-modal="true" aria-labelledby="confirmChecadaTitle">
+        <div class="checada-modal__caja">
+            <h3 id="confirmChecadaTitle"></h3>
+            <p class="checada-modal__texto" id="confirmChecadaTexto"></p>
+            <div class="checada-cambio" id="confirmChecadaCambio"></div>
+            <p class="checada-modal__nota" id="confirmChecadaNota"></p>
+            <div class="checada-modal__acciones">
+                <button class="btn btn--outline" type="button" id="confirmChecadaNo">No, cancelar</button>
+                <button class="btn btn--primary" type="button" id="confirmChecadaSi"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avance mientras el sistema guarda -->
+    <div class="checada-modal hidden" id="progresoModal" role="dialog" aria-modal="true" aria-labelledby="progresoTitle" aria-live="polite">
+        <div class="checada-modal__caja">
+            <h3 id="progresoTitle"></h3>
+            <ol class="progreso-pasos" id="progresoPasos"></ol>
+            <p class="checada-modal__nota hidden" id="progresoResultado"></p>
+            <div class="checada-modal__acciones">
+                <button class="btn btn--primary hidden" type="button" id="progresoCerrar">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de asistencia semanal: vista previa y PDF -->
+    <div class="lista-modal hidden" id="listaModal" role="dialog" aria-modal="true" aria-labelledby="listaTitulo">
+        <div class="lista-modal__caja">
+            <div class="lista-modal__barra">
+                <div>
+                    <h3 id="listaTitulo">Lista de asistencia semanal</h3>
+                    <p id="listaInfo"></p>
+                </div>
+                <div class="lista-controles">
+                    <div>
+                        <label for="listaSemana">Semana</label>
+                        <select id="listaSemana"></select>
+                    </div>
+                    <div>
+                        <label>Cómo la quieres</label>
+                        <div class="lista-modos">
+                            <label><input type="radio" name="listaModo" value="sistema" checked><span>Con los registros</span></label>
+                            <label><input type="radio" name="listaModo" value="blanco"><span>En blanco para llenar</span></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="lista-modal__vista" id="listaVista"></div>
+            <div class="lista-modal__acciones">
+                <p>En la ventana que se abre elige "Guardar como PDF". La hoja sale en horizontal, tamaño carta.</p>
+                <div>
+                    <button class="btn btn--outline" type="button" id="listaCerrar">Cerrar</button>
+                    <button class="btn btn--primary" type="button" id="listaPdf">⎙ Generar PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="zonaLista" aria-hidden="true"></div>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
@@ -445,6 +530,295 @@
             margin-top: 20px;
         }
 
+        /* Aviso de checadas */
+        .checadas-alert {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin-bottom: 20px;
+            color: #7c2d12;
+        }
+
+        .checadas-alert--ok {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #14532d;
+        }
+
+        .checadas-alert h3 {
+            margin: 0 0 4px;
+            font-size: 1rem;
+        }
+
+        .checadas-alert p {
+            margin: 0 0 10px;
+            font-size: 0.86rem;
+        }
+
+        .checadas-alert table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 0.86rem;
+            color: #334155;
+        }
+
+        .checadas-alert th,
+        .checadas-alert td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .checadas-alert th {
+            font-size: 0.7rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+            background: #f8fafc;
+        }
+
+        .checadas-alert .col-num {
+            text-align: right;
+        }
+
+        .checadas-alert h4 {
+            margin: 14px 0 6px;
+            font-size: 0.9rem;
+        }
+
+        .link-btn {
+            border: none;
+            background: none;
+            padding: 0;
+            color: #312e81;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .btn--mini {
+            padding: 5px 10px;
+            font-size: 0.78rem;
+            border-radius: 8px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .tag--ok { background: #dcfce7; color: #15803d; }
+        .tag--warn { background: #fef3c7; color: #b45309; }
+        .tag--danger { background: #fee2e2; color: #b91c1c; }
+        .tag--info { background: #e0e7ff; color: #3730a3; }
+        .tag--justificado { background: #f1f5f9; color: #475569; }
+
+        /* Captura y reporte de checadas */
+        .checada-help {
+            margin: -8px 0 12px;
+            font-size: 0.84rem;
+            color: #64748b;
+        }
+
+        .checada-form {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .checada-form label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+        }
+
+        .checada-form input {
+            border: 1px solid #dbe3f0;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.92rem;
+            color: #1f2937;
+            background: #fff;
+        }
+
+        .checada-form input:disabled {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .checada-form .checada-motivo {
+            grid-column: 1 / -1;
+        }
+
+        .checada-status {
+            margin: 12px 0 0;
+            font-size: 0.88rem;
+            color: #334155;
+        }
+
+        .checada-error {
+            margin: 10px 0 0;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            font-size: 0.86rem;
+        }
+
+        .checada-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+
+        .checada-actions .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Ventanas de confirmación y de avance */
+        .checada-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .checada-modal__caja {
+            width: min(480px, 100%);
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+        }
+
+        .checada-modal__caja h3 {
+            margin: 0 0 8px;
+            font-size: 1.2rem;
+            color: #0f172a;
+        }
+
+        .checada-modal__texto {
+            margin: 0 0 14px;
+            font-size: 0.92rem;
+            color: #475569;
+        }
+
+        .checada-cambio {
+            display: grid;
+            gap: 8px;
+        }
+
+        .checada-cambio div {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border: 1px solid #edf2f7;
+            border-radius: 10px;
+            background: #f8fafc;
+            font-size: 0.9rem;
+            color: #334155;
+        }
+
+        .checada-cambio .es-nuevo {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+            color: #1e1b4b;
+            font-weight: 600;
+        }
+
+        .checada-modal__nota {
+            margin: 14px 0 0;
+            font-size: 0.86rem;
+            color: #64748b;
+        }
+
+        .checada-modal__acciones {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .progreso-pasos {
+            list-style: none;
+            margin: 14px 0 0;
+            padding: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        .progreso-pasos li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.92rem;
+            color: #94a3b8;
+        }
+
+        .progreso-pasos li::before {
+            content: '';
+            flex: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e1;
+            box-sizing: border-box;
+        }
+
+        .progreso-pasos li.en-curso {
+            color: #1e1b4b;
+            font-weight: 600;
+        }
+
+        .progreso-pasos li.en-curso::before {
+            border-color: #c7d2fe;
+            border-top-color: #312e81;
+            animation: girar 0.7s linear infinite;
+        }
+
+        .progreso-pasos li.hecho {
+            color: #166534;
+        }
+
+        .progreso-pasos li.hecho::before {
+            content: '✓';
+            display: grid;
+            place-items: center;
+            border-color: #16a34a;
+            background: #16a34a;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        @keyframes girar {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .progreso-pasos li.en-curso::before { animation: none; }
+        }
+
         .toast {
             position: fixed;
             right: 24px;
@@ -460,7 +834,8 @@
 
         @media (max-width: 900px) {
             .hours-grid,
-            .profile-grid {
+            .profile-grid,
+            .checada-form {
                 grid-template-columns: 1fr;
             }
         }
@@ -476,22 +851,24 @@
             { clave: 'a-tiempo', texto: 'A tiempo' },
             { clave: 'retardo', texto: 'Retardos' },
             { clave: 'falta', texto: 'Faltas' },
-            { clave: 'permiso', texto: 'Permisos' },
-            { clave: 'incapacidad', texto: 'Incapacidades' }
+            { clave: 'vacaciones', texto: 'Vacaciones' },
+            { clave: 'incapacidad', texto: 'Incapacidades' },
+            { clave: 'permiso', texto: 'Permisos' }
         ];
 
         const ESTADOS_DIA = {
-            asistencia: { texto: 'A tiempo', punto: 'success', categoria: 'a-tiempo' },
-            retardo: { texto: 'Retardo', punto: 'warning', categoria: 'retardo' },
-            falta: { texto: 'Falta', punto: 'danger', categoria: 'falta' },
-            permiso: { texto: 'Permiso', punto: 'info', categoria: 'permiso' },
-            incapacidad: { texto: 'Incapacidad', punto: 'incapacity', categoria: 'incapacidad' },
-            vacaciones: { texto: 'Vacaciones', punto: 'muted', categoria: 'vacaciones' },
-            descanso: { texto: 'Descanso', punto: 'muted', categoria: 'descanso' }
+            // "punto" es el color del concepto (recursos/main.css), el mismo en todas las páginas
+            asistencia: { texto: 'A tiempo', punto: 'asistencia', categoria: 'a-tiempo' },
+            retardo: { texto: 'Retardo', punto: 'retardo', categoria: 'retardo' },
+            falta: { texto: 'Falta', punto: 'falta', categoria: 'falta' },
+            permiso: { texto: 'Permiso', punto: 'permiso', categoria: 'permiso' },
+            incapacidad: { texto: 'Incapacidad', punto: 'incapacidad', categoria: 'incapacidad' },
+            vacaciones: { texto: 'Vacaciones', punto: 'vacaciones', categoria: 'vacaciones' },
+            descanso: { texto: 'Descanso', punto: 'descanso', categoria: 'descanso' }
         };
 
 
-        const COLUMNAS_NUMERICAS = ['Días trabajados', 'Retardos', 'Faltas', 'Permisos', 'Incap.', 'Horas', 'Días'];
+        const COLUMNAS_NUMERICAS = ['Días trabajados', 'Retardos', 'Faltas', 'Permisos', 'Incap.', 'Horas', 'Horas extra', 'Días'];
 
         let periodoActual = 'hoy';
         let pestanaActual = 'todos';
@@ -556,6 +933,16 @@
                 .map((i) => ({ emp, i })));
         }
 
+        // Vacaciones del periodo. En "Hoy" no cuenta a quien además está incapacitado:
+        // ese día vale la incapacidad, igual que en Inicio y en Empleados.
+        function registrosVacaciones(lista, rango) {
+            return lista
+                .filter((emp) => periodoActual !== 'hoy' || !incapacidadEn(emp, HOY_ISO))
+                .flatMap((emp) => (emp.vacaciones || [])
+                    .filter((v) => seTraslapa(v.inicio, v.fin, rango))
+                    .map((v) => ({ emp, v })));
+        }
+
         const contarTrabajadores = (registros) => new Set(registros.map((r) => r.emp.id)).size;
 
         // =====================================================================
@@ -566,6 +953,7 @@
             const lista = plantilla(rango);
             const permisos = registrosPermiso(lista, rango);
             const incapacidades = registrosIncapacidad(lista, rango);
+            const vacaciones = registrosVacaciones(lista, rango);
 
             if (periodoActual === 'hoy') {
                 const filas = lista
@@ -573,7 +961,7 @@
                     .filter((f) => f.reg && f.reg.estado !== 'descanso');
                 const porCategoria = (cat) => filas.filter((f) => ESTADOS_DIA[f.reg.estado].categoria === cat);
                 return {
-                    rango, lista, filas, permisos, incapacidades,
+                    rango, lista, filas, permisos, incapacidades, vacaciones,
                     grupos: {
                         todos: filas,
                         'a-tiempo': porCategoria('a-tiempo'),
@@ -587,7 +975,7 @@
             // Semana o mes: resumen por trabajador
             const filas = lista.map((emp) => ({ emp, res: resumenRango(emp, rango.inicio, rango.fin) }));
             return {
-                rango, lista, filas, permisos, incapacidades,
+                rango, lista, filas, permisos, incapacidades, vacaciones,
                 grupos: {
                     todos: filas,
                     'a-tiempo': filas.filter((f) => f.res.asistencias > 0 && f.res.retardos === 0),
@@ -606,7 +994,8 @@
             setTexto('kpiPresentesNota', periodoActual === 'hoy' ? 'Checaron entrada hoy' : 'Asistieron al menos un día');
             setTexto('kpiRetardos', vista.grupos.retardo.length);
             setTexto('kpiFaltas', vista.grupos.falta.length);
-            setTexto('kpiPermisos', contarTrabajadores(vista.permisos));
+            setTexto('kpiVacaciones', contarTrabajadores(vista.vacaciones));
+            setTexto('kpiVacacionesNota', periodoActual === 'hoy' ? 'De vacaciones hoy' : 'Con vacaciones en el periodo');
             setTexto('kpiIncapacidades', contarTrabajadores(vista.incapacidades));
 
             document.querySelectorAll('.kpi-card').forEach((card) => {
@@ -622,6 +1011,7 @@
                 retardo: vista.grupos.retardo.length,
                 falta: vista.grupos.falta.length,
                 permiso: vista.permisos.length,
+                vacaciones: vista.vacaciones.length,
                 incapacidad: vista.incapacidades.length
             };
             document.getElementById('tableTabs').innerHTML = PESTANAS.map((p) => `
@@ -648,11 +1038,11 @@
         function filaHoy({ emp, reg }) {
             const info = ESTADOS_DIA[reg.estado];
             const estado = `<td><span class="status-dot ${info.punto}"></span> ${info.texto}</td>`;
-            const horario = HOY.getDay() === 6 ? '08:00 – 14:00' : '08:00 – 17:00';
+            const horario = `${horaTexto(HORARIO.entrada)} – ${horaTexto(salidaOficial(HOY))}`;
 
-            // Permisos, incapacidades y vacaciones no checan: no se muestran entrada ni salida
+            // Permisos, incapacidades y vacaciones no checan: su ausencia está justificada
             if (['permiso', 'incapacidad', 'vacaciones'].includes(reg.estado)) {
-                return `<tr data-id="${emp.id}" tabindex="0">${celdasBase(emp)}<td class="col-hora">${horario}</td><td colspan="2" class="no-check">No checa</td>${estado}</tr>`;
+                return `<tr data-id="${emp.id}" tabindex="0">${celdasBase(emp)}<td class="col-hora">${horario}</td><td colspan="2"><span class="tag tag--justificado">Justificado</span></td>${estado}</tr>`;
             }
             if (reg.estado === 'falta') {
                 return `<tr data-id="${emp.id}" tabindex="0">${celdasBase(emp)}<td class="col-hora">${horario}</td><td class="time-missing">—</td><td class="time-missing">—</td>${estado}</tr>`;
@@ -660,10 +1050,13 @@
 
             const ahora = new Date();
             const turnoAbierto = ahora.getHours() * 60 + ahora.getMinutes() < aMinutos(reg.salida);
-            const salida = turnoAbierto ? '<td class="time-missing">En turno</td>' : `<td>${reg.salida}</td>`;
+            const extras = reg.extras ? ` <small class="time-late">(+${reg.extras} h extra)</small>` : '';
+            const manual = reg.manual ? ' <span class="tag tag--info" title="Capturada a mano">Manual</span>' : '';
+            const salida = turnoAbierto ? '<td class="time-missing">En turno</td>' : `<td>${reg.salida}${extras}${manual}</td>`;
             const claseEntrada = reg.estado === 'retardo' ? 'time-late' : 'time-ok';
             const minutosTarde = aMinutos(reg.entrada) - 8 * 60;
-            const extra = reg.estado === 'retardo' ? ` <small>(+${minutosTarde} min)</small>` : '';
+            const extra = reg.estado === 'retardo' ? ` <small>(+${minutosTarde} min)</small>`
+                : reg.retardoJustificado ? ' <span class="tag tag--ok">Retardo justificado</span>' : '';
             return `<tr data-id="${emp.id}" tabindex="0">${celdasBase(emp)}<td class="col-hora">${horario}</td><td class="${claseEntrada}">${reg.entrada}${extra}</td>${salida}${estado}</tr>`;
         }
 
@@ -676,6 +1069,8 @@
                 ${valor(res.permisos, 'time-info')}
                 ${valor(res.incapacidades, 'time-info')}
                 <td class="col-num"><strong>${formatoHoras(res.horas)}</strong></td>
+                ${valor(res.extras, 'time-late')}
+                ${periodoActual === 'semana' ? `<td>${res.asistencias > 0 && !res.retardos && !res.faltas ? '<span class="tag tag--ok">Elegible</span>' : '<span class="tag">No</span>'}</td>` : ''}
             </tr>`;
         }
 
@@ -685,6 +1080,17 @@
                 <td class="col-num">${diasEntre(p.inicio, p.fin)}</td>
                 <td><span class="pill ${p.goce ? 'pill--success' : 'pill--muted'}">${p.goce ? 'Con goce' : 'Sin goce'}</span></td>
                 <td>${escaparHtml(p.motivo)}</td>
+            </tr>`;
+        }
+
+        function filaVacaciones({ emp, v }) {
+            const estado = v.fin < HOY_ISO ? '<span class="tag">Disfrutadas</span>'
+                : v.inicio <= HOY_ISO ? '<span class="tag tag--ok">En curso</span>'
+                    : '<span class="tag tag--info">Programadas</span>';
+            return `<tr data-id="${emp.id}" tabindex="0">${celdasBase(emp)}
+                <td>${periodoTexto(v.inicio, v.fin)}</td>
+                <td class="col-num">${diasHabiles(v.inicio, v.fin)}</td>
+                <td>${estado}</td>
             </tr>`;
         }
 
@@ -702,6 +1108,9 @@
             if (pestanaActual === 'permiso') {
                 return { columnas: base.concat(['Periodo', 'Días', 'Goce de sueldo', 'Motivo']), filas: vista.permisos, fila: filaPermiso };
             }
+            if (pestanaActual === 'vacaciones') {
+                return { columnas: base.concat(['Periodo', 'Días', 'Estado']), filas: vista.vacaciones, fila: filaVacaciones };
+            }
             if (pestanaActual === 'incapacidad') {
                 return { columnas: base.concat(['Tipo', 'Folio IMSS', 'Periodo', 'Días']), filas: vista.incapacidades, fila: filaIncapacidad };
             }
@@ -709,7 +1118,7 @@
                 return { columnas: base.concat(['Horario', 'Entrada', 'Salida', 'Estado']), filas: vista.grupos[pestanaActual], fila: filaHoy };
             }
             return {
-                columnas: base.concat(['Días trabajados', 'Retardos', 'Faltas', 'Permisos', 'Incap.', 'Horas']),
+                columnas: base.concat(['Días trabajados', 'Retardos', 'Faltas', 'Permisos', 'Incap.', 'Horas', 'Horas extra'], periodoActual === 'semana' ? ['Bono puntualidad'] : []),
                 filas: vista.grupos[pestanaActual],
                 fila: filaResumen
             };
@@ -726,7 +1135,7 @@
 
             let vacio = 'No hay registros para este filtro';
             const feriadoHoy = feriadoEn(HOY_ISO);
-            if (periodoActual === 'hoy' && (HOY.getDay() === 0 || feriadoHoy) && !['permiso', 'incapacidad'].includes(pestanaActual)) {
+            if (periodoActual === 'hoy' && (HOY.getDay() === 0 || feriadoHoy) && !['permiso', 'incapacidad', 'vacaciones'].includes(pestanaActual)) {
                 vacio = feriadoHoy
                     ? `Hoy es día de descanso obligatorio (${feriadoHoy.nombre}): no hay checadas.`
                     : 'Hoy es domingo: día de descanso, no hay checadas.';
@@ -734,6 +1143,7 @@
             tablaBody.innerHTML = config.filas.length
                 ? config.filas.map(config.fila).join('')
                 : `<tr><td colspan="${config.columnas.length}" class="table-empty">${vacio}</td></tr>`;
+            renderAvisoChecadas();
         }
 
         // =====================================================================
@@ -755,6 +1165,7 @@
 
         function resumenTexto(r) {
             const partes = [`${r.asistencias} día${r.asistencias === 1 ? '' : 's'} trabajado${r.asistencias === 1 ? '' : 's'}`];
+            if (r.extras) partes.push(`${r.extras} h extra`);
             if (r.retardos) partes.push(`${r.retardos} retardo${r.retardos === 1 ? '' : 's'}`);
             if (r.faltas) partes.push(`${r.faltas} falta${r.faltas === 1 ? '' : 's'}`);
             if (r.permisos) partes.push(`${r.permisos} día${r.permisos === 1 ? '' : 's'} de permiso`);
@@ -777,9 +1188,8 @@
             const semana = resumenRango(emp, inicioSemana, finSemana);
             setTexto('detailWeekLabel', `Semana (${etiquetaSemana({ inicio: inicioSemana, fin: finSemana })})`);
             setTexto('detailWeekHours', formatoHoras(semana.horas));
-            // Regla de Configuración: el retardo siguiente a los permitidos en la semana descuenta un día completo
-            const descuento = diasDescontadosPorRetardos(semana.retardos);
-            setTexto('detailWeekSummary', resumenTexto(semana) + (descuento ? ` · se descuenta ${textoDias(descuento)} por retardos` : ''));
+            // Los retardos no descuentan: RH habla con el trabajador
+            setTexto('detailWeekSummary', resumenTexto(semana));
 
             const mes = resumenRango(emp, new Date(HOY.getFullYear(), HOY.getMonth(), 1, 12), new Date(HOY.getFullYear(), HOY.getMonth() + 1, 0, 12));
             setTexto('detailMonthLabel', `Mes (${MESES[HOY.getMonth()]} ${HOY.getFullYear()})`);
@@ -789,12 +1199,14 @@
             const incidencias = [
                 ...(emp.incidencias || []).map((i) => ({ fecha: i.fecha, texto: `<strong>${NOMBRES_INCIDENCIA[i.tipo]}</strong> · ${escaparHtml(i.detalle)}` })),
                 ...(emp.permisos || []).map((p) => ({ fecha: p.inicio, texto: `<strong>Permiso ${p.goce ? 'con' : 'sin'} goce</strong> · ${periodoTexto(p.inicio, p.fin)} · ${escaparHtml(p.motivo)}` })),
-                ...(emp.incapacidades || []).map((i) => ({ fecha: i.inicio, texto: `<strong>Incapacidad (${escaparHtml(i.tipo)})</strong> · Folio IMSS ${escaparHtml(i.folio)} · ${periodoTexto(i.inicio, finIncapacidad(i))}` }))
+                ...(emp.incapacidades || []).map((i) => ({ fecha: i.inicio, texto: `<strong>Incapacidad (${escaparHtml(i.tipo)})</strong> · Folio IMSS ${escaparHtml(i.folio)} · ${periodoTexto(i.inicio, finIncapacidad(i))}` })),
+                ...(emp.asistenciasManuales || []).map((a) => ({ fecha: a.fecha, texto: `<strong>${a.anterior ? 'Checada corregida' : 'Asistencia capturada a mano'}</strong> · ${a.entrada} – ${a.salida} · ${escaparHtml(a.motivo)} · por ${escaparHtml(a.registradoPor)}` }))
             ].sort((a, b) => b.fecha.localeCompare(a.fecha));
             document.getElementById('detailIncidentsCard').classList.toggle('hidden', !incidencias.length);
             document.getElementById('detailIncidents').innerHTML = incidencias
                 .map((i) => `<li>${formatoFecha(i.fecha)} · ${i.texto}</li>`).join('');
 
+            prepararChecada(emp);
             detailPanel.classList.remove('hidden');
             detailPanel.setAttribute('aria-hidden', 'false');
         }
@@ -803,6 +1215,281 @@
             detailPanel.classList.add('hidden');
             detailPanel.setAttribute('aria-hidden', 'true');
             seleccionado = null;
+        }
+
+        // =====================================================================
+        //  CHECADAS: aviso de quién no ha checado, reportes y captura manual
+        // =====================================================================
+        const sinChecarHoy = (lista) => lista.filter((e) => registroDia(e, HOY)?.estado === 'falta');
+        const enlaceTrabajador = (emp) => `<button class="link-btn" type="button" data-abrir="${emp.id}">${emp.id} · ${escaparHtml(emp.nombre)}</button>`;
+
+        function etiquetaReporte(reporte) {
+            if (!reporte) return '<span class="tag tag--danger">Sin reporte · quedará como falta</span>';
+            const clase = { pendiente: 'tag--warn', confirmada: 'tag--ok', descartada: 'tag--danger' }[reporte.estado];
+            return `<span class="tag ${clase}">Reportado · ${ESTADOS_REPORTE[reporte.estado]}</span>`;
+        }
+
+        function renderAvisoChecadas() {
+            const caja = document.getElementById('checadasAlert');
+            const domingoOFeriado = HOY.getDay() === 0 || feriadoEn(HOY_ISO);
+
+            if (puede('reportarFallaChecadora')) {
+                // Admin: es su obligación que todos los de su sucursal chequen
+                if (domingoOFeriado) { caja.classList.add('hidden'); return; }
+                const faltan = sinChecarHoy(EMPLEADOS);
+                caja.classList.remove('hidden');
+                caja.classList.toggle('checadas-alert--ok', !faltan.length);
+                caja.innerHTML = faltan.length
+                    ? `<h3>⚠️ ${faltan.length} trabajador${faltan.length === 1 ? '' : 'es'} de tu sucursal no ha${faltan.length === 1 ? '' : 'n'} checado hoy</h3>
+                       <p>Es tu responsabilidad que todos chequen. Si la checadora falló, repórtalo a RH; si no se reporta, el día queda como <strong>falta</strong>.</p>
+                       <table><tbody>${faltan.map((emp) => {
+                           const reporte = reporteDe(emp.id, HOY_ISO);
+                           return `<tr><td>${enlaceTrabajador(emp)}</td><td>${etiquetaReporte(reporte)}</td>
+                               <td class="col-num">${reporte ? '' : `<button class="btn btn--primary btn--mini" type="button" data-abrir="${emp.id}">Reportar falla</button>`}</td></tr>`;
+                       }).join('')}</tbody></table>`
+                    : '<h3>✅ Todos los trabajadores de tu sucursal checaron hoy</h3>';
+                return;
+            }
+
+            // RH y Super usuario: resumen por sucursal y reportes por atender
+            const pendientes = listaReportes()
+                .filter((r) => !r.atendido)
+                .map((r) => ({ r, emp: EMPLEADOS.find((e) => e.id === r.empleado) }))
+                .filter(({ r, emp }) => emp && registroDia(emp, fechaDesdeISO(r.fecha))?.estado === 'falta')
+                .sort((a, b) => a.r.fecha.localeCompare(b.r.fecha));
+            const porSucursal = domingoOFeriado ? [] : listaSucursales()
+                .map(({ clave, nombre }) => {
+                    const faltan = sinChecarHoy(EMPLEADOS.filter((e) => e.suc === clave));
+                    const reportados = faltan.filter((e) => reporteDe(e.id, HOY_ISO)).length;
+                    return { clave, nombre, faltan: faltan.length, reportados };
+                })
+                .filter((s) => s.faltan > 0);
+
+            if (!pendientes.length && !porSucursal.length) { caja.classList.add('hidden'); return; }
+            caja.classList.remove('hidden', 'checadas-alert--ok');
+            let html = '<h3>🕒 Checadas de hoy</h3><p>Quien no checó y no tiene reporte de su admin queda como falta. Los retardos no descuentan: habla con el trabajador.</p>';
+            if (porSucursal.length) {
+                html += `<table><thead><tr><th>Sucursal</th><th class="col-num">Sin checar hoy</th><th class="col-num">Reportados por el admin</th><th class="col-num">Sin reporte</th></tr></thead><tbody>
+                    ${porSucursal.map((s) => `<tr><td>${s.clave} - ${escaparHtml(s.nombre)}</td><td class="col-num">${s.faltan}</td><td class="col-num">${s.reportados}</td>
+                        <td class="col-num">${s.faltan - s.reportados ? `<span class="tag tag--danger">${s.faltan - s.reportados}</span>` : '0'}</td></tr>`).join('')}
+                </tbody></table>`;
+            }
+            if (pendientes.length) {
+                html += `<h4>Reportes de falla por atender (${pendientes.length})</h4>
+                    <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Motivo</th><th>Sistemas</th><th></th></tr></thead><tbody>
+                    ${pendientes.map(({ r, emp }) => `<tr><td>${enlaceTrabajador(emp)}</td><td>${formatoFecha(r.fecha)}</td><td>${escaparHtml(r.motivo)}</td>
+                        <td>${etiquetaReporte(r).replace('Reportado · ', '')}</td>
+                        <td class="col-num"><button class="btn btn--primary btn--mini" type="button" data-abrir="${emp.id}" data-fecha="${r.fecha}">Registrar asistencia</button></td></tr>`).join('')}
+                </tbody></table>`;
+            }
+            caja.innerHTML = html;
+        }
+
+        const checada = {
+            fecha: document.getElementById('checadaFecha'),
+            entrada: document.getElementById('checadaEntrada'),
+            salida: document.getElementById('checadaSalida'),
+            motivo: document.getElementById('checadaMotivo'),
+            boton: document.getElementById('checadaBtn'),
+            estado: document.getElementById('checadaStatus'),
+            error: document.getElementById('checadaError')
+        };
+        let accionChecada = null; // 'reportar' | 'capturar' | 'corregir' | null
+
+        function prepararChecada(emp, fecha = HOY_ISO) {
+            const reporta = puede('reportarFallaChecadora');
+            const captura = puede('registrarAsistenciaManual');
+            document.getElementById('checadaCard').classList.toggle('hidden', !reporta && !captura);
+            if (!reporta && !captura) return;
+
+            setTexto('checadaTitle', reporta ? 'Reportar falla de la checadora' : 'Asistencia manual');
+            setTexto('checadaHelp', reporta
+                ? 'Si el trabajador sí vino pero la checadora no lo registró, repórtalo a RH. Tú no capturas la asistencia.'
+                : 'Para los días sin checada por falla de la checadora. Revisa antes si Sistemas confirmó la falla.');
+            document.querySelectorAll('#checadaCard .solo-captura').forEach((el) => el.classList.toggle('hidden', reporta));
+            checada.fecha.min = emp.ingreso;
+            checada.fecha.max = emp.baja && emp.baja.fecha < HOY_ISO ? emp.baja.fecha : HOY_ISO;
+            checada.fecha.value = fecha;
+            checada.motivo.value = '';
+            actualizarChecada();
+        }
+
+        function actualizarChecada() {
+            const emp = seleccionado;
+            if (!emp) return;
+            checada.error.classList.add('hidden');
+            const iso = checada.fecha.value;
+            const reg = iso ? registroDia(emp, fechaDesdeISO(iso)) : null;
+            const reporte = iso ? reporteDe(emp.id, iso) : null;
+            let estado = '';
+            accionChecada = null;
+
+            if (!reg) estado = 'Elige un día entre su fecha de ingreso y hoy.';
+            else if (['descanso', 'vacaciones', 'incapacidad', 'permiso'].includes(reg.estado)) estado = `Ese día no se checa: ${ESTADOS_DIA[reg.estado].texto.toLowerCase()}.`;
+            else if (puede('reportarFallaChecadora')) {
+                if (reg.estado !== 'falta') estado = `Ese día sí checó: entrada ${reg.entrada}, salida ${reg.salida}.`;
+                else if (reporte) estado = `Ya lo reportaste. ${ESTADOS_REPORTE[reporte.estado]}.`;
+                else { estado = 'No checó ese día.'; accionChecada = 'reportar'; }
+            } else if (reg.estado === 'falta') {
+                estado = reporte
+                    ? `Reportado por ${escaparHtml(reporte.reportadoPor)}: "${escaparHtml(reporte.motivo)}". ${ESTADOS_REPORTE[reporte.estado]}.`
+                    : 'No checó ese día y su admin no lo ha reportado.';
+                accionChecada = 'capturar';
+            } else {
+                estado = reg.manual
+                    ? `Capturada a mano por ${escaparHtml(reg.manual.registradoPor)}: ${reg.entrada} – ${reg.salida}.`
+                    : `Checó: entrada ${reg.entrada}, salida ${reg.salida}${reg.extras ? ` (${reg.extras} h extra)` : ''}.`;
+                if (puede('corregirChecada')) {
+                    estado += ' Como Super usuario puedes corregirla.';
+                    accionChecada = 'corregir';
+                }
+            }
+
+            if (accionChecada === 'corregir' || accionChecada === 'capturar') {
+                checada.entrada.value = reg.entrada || horaTexto(HORARIO.entrada);
+                checada.salida.value = reg.salida || horaTexto(salidaOficial(fechaDesdeISO(iso)));
+            }
+            checada.estado.innerHTML = estado;
+            [checada.entrada, checada.salida, checada.motivo].forEach((el) => { el.disabled = !accionChecada; });
+            checada.boton.disabled = !accionChecada;
+            checada.boton.textContent = { reportar: 'Reportar a RH', capturar: 'Registrar asistencia', corregir: 'Corregir checada' }[accionChecada]
+                || (puede('reportarFallaChecadora') ? 'Reportar a RH' : 'Registrar asistencia');
+        }
+
+        function errorChecada(texto) {
+            checada.error.textContent = texto;
+            checada.error.classList.remove('hidden');
+        }
+
+        function guardarChecada() {
+            const emp = seleccionado;
+            if (!emp || !accionChecada) return;
+            const iso = checada.fecha.value;
+            const motivo = checada.motivo.value.trim();
+            if (motivo.length < 5) return errorChecada('Escribe el motivo (mínimo 5 caracteres).');
+
+            if (accionChecada === 'reportar') {
+                const reportes = listaReportes();
+                reportes.push({
+                    id: `${emp.id}-${iso}`, fecha: iso, empleado: emp.id, suc: emp.suc, motivo,
+                    reportadoPor: USUARIO_ACTUAL.usuario, creado: new Date().toISOString(), estado: 'pendiente', atendido: false
+                });
+                if (!guardarReportes(reportes)) return errorChecada('Este navegador no permite guardar el reporte.');
+                registrarBitacora('Falla de checadora reportada', `${emp.id} · ${emp.nombre} · ${formatoFecha(iso)}`);
+                mostrarToast(`Se reportó a RH que ${emp.nombre} no pudo checar el ${formatoFecha(iso)}.`);
+                renderizarTabla();
+                showEmployeeDetail(emp);
+                prepararChecada(emp, iso);
+                return;
+            }
+
+            const entrada = checada.entrada.value;
+            const salida = checada.salida.value;
+            if (!entrada || !salida) return errorChecada('Captura la hora de entrada y la de salida.');
+            if (aMinutos(salida) <= aMinutos(entrada)) return errorChecada('La salida debe ser después de la entrada.');
+            const anterior = accionChecada === 'corregir' ? registroDia(emp, fechaDesdeISO(iso)) : null;
+            if (anterior && anterior.entrada === entrada && anterior.salida === salida) return errorChecada('Las horas son las mismas que ya tiene: no hay nada que corregir.');
+            // Cambiar la asistencia afecta la nómina: se pide confirmar antes de guardar
+            pedirConfirmacionChecada({ emp, iso, entrada, salida, motivo, anterior });
+        }
+
+        // =====================================================================
+        //  CONFIRMACIÓN Y AVANCE AL CORREGIR O CAPTURAR UNA CHECADA
+        // =====================================================================
+        const confirmModal = document.getElementById('confirmChecadaModal');
+        const progresoModal = document.getElementById('progresoModal');
+        let cambioPendiente = null;
+        const textoExtras = (n) => (n ? ` · ${n} h extra` : ' · sin horas extra');
+        const pausa = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
+
+        function pedirConfirmacionChecada(cambio) {
+            cambioPendiente = cambio;
+            const { emp, iso, entrada, salida, anterior } = cambio;
+            const extrasNuevas = horasExtra(fechaDesdeISO(iso), aMinutos(salida));
+            setTexto('confirmChecadaTitle', anterior ? '¿Estás seguro de corregir esta checada?' : '¿Estás seguro de registrar esta asistencia?');
+            setTexto('confirmChecadaTexto', `${emp.id} · ${emp.nombre} · ${fechaLarga(fechaDesdeISO(iso))}`);
+            document.getElementById('confirmChecadaCambio').innerHTML =
+                (anterior
+                    ? `<div><span>Antes</span><span>${anterior.entrada} – ${anterior.salida}${textoExtras(anterior.extras)}</span></div>`
+                    : '<div><span>Antes</span><span>Sin checada (falta)</span></div>') +
+                `<div class="es-nuevo"><span>Después</span><span>${entrada} – ${salida}${textoExtras(extrasNuevas)}</span></div>`;
+            setTexto('confirmChecadaNota', 'El cambio se aplica en Asistencia, en las horas extra y en la nómina de esa semana, y queda anotado en la bitácora con tu usuario.');
+            setTexto('confirmChecadaSi', anterior ? 'Sí, corregir' : 'Sí, registrar');
+            confirmModal.classList.remove('hidden');
+            document.getElementById('confirmChecadaSi').focus();
+        }
+
+        function cerrarConfirmacion() {
+            confirmModal.classList.add('hidden');
+            cambioPendiente = null;
+        }
+
+        // Guarda el cambio paso por paso y muestra el avance.
+        // Hoy cada paso es inmediato (se guarda en el navegador); con el servidor, aquí se esperará su respuesta.
+        async function aplicarChecada() {
+            const cambio = cambioPendiente;
+            if (!cambio) return;
+            const { emp, iso, entrada, salida, motivo, anterior } = cambio;
+            cerrarConfirmacion();
+
+            const lista = document.getElementById('progresoPasos');
+            const resultado = document.getElementById('progresoResultado');
+            const cerrar = document.getElementById('progresoCerrar');
+            setTexto('progresoTitle', anterior ? 'Corrigiendo la checada…' : 'Registrando la asistencia…');
+            resultado.classList.add('hidden');
+            cerrar.classList.add('hidden');
+            progresoModal.classList.remove('hidden');
+
+            let registro = null;
+            const pasos = [
+                ['Guardando la checada', () => {
+                    emp.asistenciasManuales = (emp.asistenciasManuales || []).filter((a) => a.fecha !== iso);
+                    emp.asistenciasManuales.push({
+                        fecha: iso, entrada, salida, motivo,
+                        registradoPor: USUARIO_ACTUAL.usuario, registradoEl: new Date().toISOString(),
+                        anterior: anterior ? { entrada: anterior.entrada, salida: anterior.salida } : null
+                    });
+                    // Aquí irá la petición a la base de datos en línea; por ahora se guarda en el navegador
+                    guardarCambios();
+                }],
+                ['Recalculando horas y horas extra', () => {
+                    registro = registroDia(emp, fechaDesdeISO(iso));
+                }],
+                ['Actualizando Asistencia y la nómina de la semana', () => {
+                    const reportes = listaReportes();
+                    const reporte = reportes.find((r) => r.empleado === emp.id && r.fecha === iso);
+                    if (reporte) {
+                        reporte.atendido = true;
+                        guardarReportes(reportes);
+                    }
+                    renderizarTabla();
+                    showEmployeeDetail(emp);
+                    prepararChecada(emp, iso);
+                }],
+                ['Anotando el cambio en la bitácora', () => {
+                    registrarBitacora(anterior ? 'Checada corregida' : 'Asistencia manual registrada',
+                        `${emp.id} · ${emp.nombre} · ${formatoFecha(iso)} · ${anterior ? `${anterior.entrada}–${anterior.salida} → ` : ''}${entrada}–${salida}`);
+                }]
+            ];
+            lista.innerHTML = pasos.map(([texto]) => `<li>${texto}</li>`).join('');
+
+            try {
+                for (let i = 0; i < pasos.length; i++) {
+                    lista.children[i].className = 'en-curso';
+                    await pausa(450);
+                    pasos[i][1]();
+                    lista.children[i].className = 'hecho';
+                }
+                setTexto('progresoTitle', anterior ? '✅ Checada corregida' : '✅ Asistencia registrada');
+                resultado.textContent = `${emp.nombre}, ${formatoFecha(iso)}: ${registro.entrada} – ${registro.salida}${textoExtras(registro.extras)}. Ya aparece así en Asistencia.`;
+            } catch (error) {
+                console.error(error);
+                setTexto('progresoTitle', '⚠️ No se pudo guardar');
+                resultado.textContent = 'Ocurrió un error al guardar. Revisa la checada e inténtalo de nuevo.';
+            }
+            resultado.classList.remove('hidden');
+            cerrar.classList.remove('hidden');
+            cerrar.focus();
         }
 
         function mostrarToast(texto) {
@@ -841,6 +1528,7 @@
         function llenarFiltros() {
             branchFilter.innerHTML = '<option value="todas">Todas las sucursales</option>' +
                 listaSucursales().map(({ clave, nombre }) => `<option value="${clave}">${clave} - ${escaparHtml(nombre)}</option>`).join('');
+            fijarSucursalUnica(branchFilter);
             departmentFilter.innerHTML = '<option value="todos">Todos los departamentos</option>' +
                 DEPARTAMENTOS.map((d) => `<option value="${escaparHtml(d.nombre)}">${escaparHtml(d.nombre)}</option>`).join('');
         }
@@ -895,6 +1583,24 @@
                 }
             });
 
+            document.getElementById('checadasAlert').addEventListener('click', (event) => {
+                const boton = event.target.closest('[data-abrir]');
+                const emp = boton && EMPLEADOS.find((e) => e.id === boton.dataset.abrir);
+                if (!emp) return;
+                showEmployeeDetail(emp);
+                if (boton.dataset.fecha) prepararChecada(emp, boton.dataset.fecha);
+                document.getElementById('checadaCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            checada.fecha.addEventListener('change', actualizarChecada);
+            checada.boton.addEventListener('click', guardarChecada);
+            document.getElementById('confirmChecadaSi').addEventListener('click', aplicarChecada);
+            document.getElementById('confirmChecadaNo').addEventListener('click', cerrarConfirmacion);
+            confirmModal.addEventListener('click', (event) => { if (event.target === confirmModal) cerrarConfirmacion(); });
+            document.getElementById('progresoCerrar').addEventListener('click', () => progresoModal.classList.add('hidden'));
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !confirmModal.classList.contains('hidden')) cerrarConfirmacion();
+            });
+
             document.getElementById('exportReporteBtn').addEventListener('click', exportReporte);
             document.getElementById('closeDetailPanelBtn').addEventListener('click', closeEmployeeDetail);
             document.getElementById('backToEmployees').addEventListener('click', closeEmployeeDetail);
@@ -906,6 +1612,7 @@
         });
     </script>
 
+    <script src="recursos/lista-asistencia.js"></script>
     <script src="recursos/estado-servidor.js"></script>
 </body>
 

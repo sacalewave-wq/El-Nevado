@@ -199,3 +199,42 @@
     font-size: 12px;
     color: #94a3b8;
 }
+/* ===============================
+   ERROR Y CUENTAS DE PRUEBA
+================================ */
+.hidden {
+    display: none;
+}
+
+.login-error {
+    margin: -8px 0 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    font-size: 13px;
+}
+
+.login-form__footer span {
+    font-size: 13px;
+    color: #64748b;
+}
+
+.login-demo {
+    margin-top: 16px;
+    font-size: 12px;
+    color: #64748b;
+    text-align: left;
+}
+
+.login-demo summary {
+    cursor: pointer;
+    text-align: center;
+}
+
+.login-demo ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    line-height: 1.8;
+}

@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="recursos/empleados.css">
     <!-- SheetJS: genera y lee archivos de Excel (.xlsx) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body class="page-empleados">
@@ -67,7 +69,7 @@
             </div>
 
             <div class="header__right employee-header__right">
-                <a href="incapacidades.html" class="btn btn--secondary btn--pill">Incapacidades</a>
+                <a href="incapacidades.html" class="btn btn--secondary btn--pill" id="incapacidadesLink">Incapacidades</a>
                 <button id="openImportModal" class="btn btn--secondary btn--pill" type="button">⇪ Importar</button>
                 <button id="openNewEmployeeModal" class="btn btn--primary btn--new-employee" type="button">+ Nuevo Trabajador</button>
             </div>
@@ -151,10 +153,16 @@
                     <div>
                         <div class="detail-panel__eyebrow">Ficha del empleado</div>
                         <h3 id="detailName"></h3>
+                        <!-- Aviso corto de documentos faltantes: al hacer clic baja a la sección Documentos -->
+                        <button id="detailDocsChip" class="docs-chip hidden" type="button"></button>
                     </div>
                 </div>
                 <div class="detail-panel__actions">
+                    <a id="requestLink" class="btn btn--primary hidden" href="solicitudes.html">+ Solicitar a RH</a>
                     <button id="openRecordModal" class="btn btn--primary" type="button">+ Registrar incidencia</button>
+                    <!-- Editar y borrar: solo Super usuario y RH -->
+                    <button id="editEmployeeBtn" class="detail-edit hidden" type="button">✏️ Editar</button>
+                    <button id="deleteEmployeeBtn" class="detail-delete hidden" type="button">🗑 Borrar trabajador</button>
                     <button id="backToEmployees" class="detail-back" type="button">← Regresar</button>
                 </div>
             </div>
@@ -302,7 +310,20 @@
                         </div>
                         <span id="incidentCount">0 registros</span>
                     </div>
+                    <div id="faltas30Alert" class="faltas-alert hidden"></div>
                     <div id="incidentList" class="history-list"></div>
+                </section>
+
+                <!-- Documentos del expediente: hoy se guardan en este navegador; después, en el servidor -->
+                <section class="employee-profile-section" id="documentsSection">
+                    <div class="section-header">
+                        <h4>Documentos</h4>
+                        <span id="documentsCount"></span>
+                    </div>
+                    <div id="documentsAlert" class="faltas-alert hidden"></div>
+                    <p class="documents-note">PDF, JPG o PNG de máximo 2 MB. Por ahora los archivos se guardan solo en esta computadora; cuando el sistema esté en línea se guardarán en el servidor.</p>
+                    <div id="documentsList" class="documents-list"></div>
+                    <input id="documentFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" hidden>
                 </section>
             </div>
         </div>
@@ -359,7 +380,7 @@
                 <div class="employee-modal__title-wrap">
                     <span class="back-icon">←</span>
                     <div>
-                        <div class="employee-modal__eyebrow">Agregar Nuevo Ingreso</div>
+                        <div class="employee-modal__eyebrow" id="employeeModalEyebrow">Agregar Nuevo Ingreso</div>
                         <h3 id="employeeModalTitle">Alta de Nuevo colaborador</h3>
                     </div>
                 </div>
@@ -497,7 +518,7 @@
                             <ol>
                                 <li>El ID se genera automáticamente según la sucursal.</li>
                                 <li>Elige primero el departamento y después el puesto.</li>
-                                <li>El sueldo se captura por semana (de sábado a viernes).</li>
+                                <li class="solo-sueldos">El sueldo se captura por semana (de sábado a viernes).</li>
                             </ol>
                         </div>
                         <div class="field field--half">
@@ -542,7 +563,7 @@
                 <div class="wizard-panel__content" data-step="3">
                     <div class="sync-box">
                         <div class="sync-icon">◉</div>
-                        <div>
+                        <div id="summaryIntro">
                             <strong>Resumen del nuevo ingreso:</strong> revisa que todo sea correcto. Al presionar <strong>Guardar Nuevo Ingreso</strong> se te pedirá confirmar antes de guardar.
                         </div>
                     </div>
@@ -679,8 +700,8 @@
                         <option value="vacaciones">Vacaciones</option>
                         <option value="permiso">Permiso</option>
                         <option value="incapacidad">Incapacidad</option>
-                        <option value="retardo">Retardo</option>
-                        <option value="falta">Falta</option>
+                        <option value="retardo-justificado">Retardo justificado</option>
+                        <option value="falta-administrativa">Falta administrativa</option>
                         <option value="salida-temprana">Salida temprana</option>
                     </select>
                     <small class="field-error" data-error-for="recordType"></small>
@@ -727,6 +748,14 @@
                     </div>
                 </div>
 
+                <p id="recordTypeInfo" class="form-message is-info hidden"></p>
+
+                <div class="field hidden" id="recordActaFields">
+                    <label for="recordTestigos">Testigos *</label>
+                    <input id="recordTestigos" type="text" maxlength="160" placeholder="2 nombres, separados por coma" autocomplete="off">
+                    <small class="field-error" data-error-for="recordTestigos"></small>
+                </div>
+
                 <div class="field hidden" id="recordDetailField">
                     <label for="recordDetail" id="recordDetailLabel">Motivo *</label>
                     <textarea id="recordDetail" rows="3" placeholder="Escribe el motivo o la justificación..."></textarea>
@@ -743,6 +772,7 @@
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
     <script src="recursos/datos.js"></script>
+    <script src="recursos/documentos.js"></script>
     <script>
         // =====================================================================
         //  LISTA PRINCIPAL
@@ -833,8 +863,8 @@
 
         function estadoVacacion(v) {
             if (HOY_ISO < v.inicio) return '<span class="status-badge status-scheduled">Programadas</span>';
-            if (HOY_ISO > v.fin) return '<span class="status-badge status-finished">Concluidas</span>';
-            return '<span class="status-badge status-vacation">En curso</span>';
+            if (HOY_ISO > v.fin) return '<span class="status-badge status-finished">Disfrutadas</span>';
+            return '<span class="status-badge status-active">En curso</span>';
         }
 
         // Columnas y filas de cada vista (tarjeta seleccionada)
@@ -1280,7 +1310,6 @@
                 return;
             }
 
-            const colores = { 'Maternidad': 'badge-pink', 'Enfermedad general': 'badge-blue', 'Riesgo de trabajo': 'badge-gold' };
             historyCount.textContent = `${filtradas.length} ${filtradas.length === 1 ? 'registro' : 'registros'}`;
             historyList.innerHTML = filtradas.map((i) => {
                 const fin = finIncapacidad(i);
@@ -1288,14 +1317,14 @@
                 return `
                     <div class="history-item">
                         <div class="history-item__top">
-                            <span class="history-badge ${colores[i.tipo] || 'badge-gold'}">${escaparHtml(i.tipo)}</span>
+                            <span class="history-badge color-incapacidad">${escaparHtml(i.tipo)}</span>
                             <span class="history-days">${textoDias(i.dias)}</span>
                         </div>
                         <div class="history-item__meta">
                             <span>${formatoFecha(i.inicio)} – ${formatoFecha(fin)}</span>
                             <span>Folio IMSS: ${escaparHtml(i.folio)}</span>
                         </div>
-                        <div class="history-item__status ${activa ? 'status-warn' : 'status-ok'}">${activa ? 'Activa' : 'Concluida'}</div>
+                        <div class="history-item__status ${activa ? 'status-warn' : 'status-ok'}">${activa ? 'Activa' : 'Finalizada'}</div>
                     </div>
                 `;
             }).join('');
@@ -1339,7 +1368,7 @@
                         <strong>${item.label}</strong>
                         <span>${item.range}</span>
                     </div>
-                    <div class="vacation-badge">${textoDias(item.days)}</div>
+                    <div class="vacation-badge color-vacaciones">${textoDias(item.days)}</div>
                 </div>
             `).join('');
         }
@@ -1352,18 +1381,27 @@
                 ...(emp.permisos || []).map((p) => ({
                     fecha: p.inicio,
                     tipo: 'Permiso',
-                    color: 'badge-blue',
+                    color: 'color-permiso',
                     dias: textoDias(diasHabiles(p.inicio, p.fin)),
                     rango: p.inicio === p.fin ? formatoFecha(p.inicio) : `${formatoFecha(p.inicio)} – ${formatoFecha(p.fin)}`,
                     detalle: `${p.goce ? 'Con' : 'Sin'} goce de sueldo · ${p.motivo}`
                 })),
-                ...(emp.incidencias || []).map((i) => ({
+                // Las faltas que salen de un acta se muestran una sola vez, como "Falta administrativa"
+                ...(emp.incidencias || []).filter((i) => !i.acta).map((i) => ({
                     fecha: i.fecha,
                     tipo: NOMBRES_INCIDENCIA[i.tipo],
-                    color: i.tipo === 'falta' ? 'badge-pink' : 'badge-gold',
+                    color: i.tipo === 'falta' ? 'color-falta' : 'color-retardo',
                     dias: '',
                     rango: formatoFecha(i.fecha),
                     detalle: i.detalle
+                })),
+                ...(emp.actas || []).map((a) => ({
+                    fecha: a.fecha,
+                    tipo: 'Falta administrativa',
+                    color: 'color-falta',
+                    dias: '',
+                    rango: formatoFecha(a.fecha),
+                    detalle: `${a.hechos} · Testigos: ${a.testigos}`
                 }))
             ]
                 .filter((i) => Number(i.fecha.slice(0, 4)) === anio)
@@ -1403,8 +1441,10 @@
             setTexto('detailVacation', emp.baja
                 ? '—'
                 : `${diasVacacionesDisponibles(emp, HOY.getFullYear())} de ${getVacationDaysForYear(antiguedadAnios(emp))} días`);
-            // A un trabajador dado de baja ya no se le registran incidencias
-            document.getElementById('openRecordModal').classList.toggle('hidden', Boolean(emp.baja));
+            // A un trabajador dado de baja ya no se le registran incidencias; el admin las solicitará a RH
+            document.getElementById('openRecordModal').classList.toggle('hidden', Boolean(emp.baja) || !puede('registrarIncidencias'));
+            document.getElementById('editEmployeeBtn').classList.toggle('hidden', !puede('editarTrabajador'));
+            document.getElementById('deleteEmployeeBtn').classList.toggle('hidden', !puede('borrarTrabajador'));
 
             document.getElementById('detailExitDateItem').classList.toggle('hidden', !emp.baja);
             document.getElementById('detailExitReasonItem').classList.toggle('hidden', !emp.baja);
@@ -1430,10 +1470,169 @@
             renderVacations();
             renderHistory();
             renderIncidencias();
+            renderFaltas30(emp);
+            renderDocumentos(emp);
+
+            // El admin pide a RH vacaciones, permisos, incapacidades y faltas administrativas;
+            // RH y Super usuario las registran directo con "Registrar incidencia"
+            const requestLink = document.getElementById('requestLink');
+            requestLink.classList.toggle('hidden', Boolean(emp.baja) || !puede('solicitarVacaciones'));
+            requestLink.href = `solicitudes.html?nueva=vacaciones&id=${emp.id}`;
 
             detailPanel.classList.remove('hidden');
             detailPanel.setAttribute('aria-hidden', 'false');
         }
+
+        // =====================================================================
+        //  FALTAS EN 30 DÍAS (LFT art. 47, fr. X)
+        // =====================================================================
+        function renderFaltas30(emp) {
+            const caja = document.getElementById('faltas30Alert');
+            const faltas = emp.baja ? [] : faltasUltimos30(emp);
+            const nivel = nivelFaltas(faltas.length);
+            caja.classList.toggle('hidden', faltas.length < 2);
+            if (faltas.length < 2) return;
+            caja.className = `faltas-alert faltas-alert--${nivel.clase}`;
+            caja.innerHTML = `<strong>${faltas.length} faltas sin justificar en los últimos 30 días · ${escaparHtml(nivel.titulo)}</strong>
+                <span>${escaparHtml(nivel.texto)} <a href="solicitudes.html">Ver en Solicitudes ›</a></span>`;
+        }
+
+        // =====================================================================
+        //  DOCUMENTOS DEL EXPEDIENTE
+        // =====================================================================
+        const documentFileInput = document.getElementById('documentFileInput');
+        let documentoPorSubir = null;
+
+        function renderDocumentos(emp) {
+            const { completos, total } = avanceExpediente(emp);
+            setTexto('documentsCount', `${completos} de ${total} obligatorios`);
+
+            // Aviso de lo que falta por entregar (los rechazados hay que volver a subirlos)
+            const obligatorios = DOCUMENTOS_BASICOS.filter((d) => d.obligatorio);
+            const nombres = (estado) => obligatorios.filter((d) => estadoDocumento(emp, d.clave).estado === estado).map((d) => escaparHtml(d.nombre));
+            const faltan = nombres('falta');
+            const rechazados = nombres('rechazado');
+            const porRevisar = nombres('entregado');
+            const aviso = document.getElementById('documentsAlert');
+            aviso.classList.toggle('hidden', Boolean(emp.baja));
+            if (faltan.length || rechazados.length) {
+                const pendientes = faltan.length + rechazados.length;
+                aviso.className = 'faltas-alert faltas-alert--warn';
+                aviso.innerHTML = `<strong>⚠️ Expediente incompleto: ${pendientes === 1 ? 'falta 1 documento obligatorio' : `faltan ${pendientes} documentos obligatorios`}</strong>`
+                    + (faltan.length ? `<span><b>Sin entregar:</b> ${faltan.join(', ')}.</span>` : '')
+                    + (rechazados.length ? `<span><b>Rechazados (hay que volver a subirlos):</b> ${rechazados.join(', ')}.</span>` : '');
+            } else {
+                aviso.className = 'faltas-alert faltas-alert--ok';
+                aviso.innerHTML = `<strong>✅ Expediente completo: se entregaron los ${total} documentos obligatorios</strong>`
+                    + (porRevisar.length ? `<span>Pendientes de revisión por RH: ${porRevisar.join(', ')}.</span>` : '');
+            }
+            if (emp.baja) aviso.classList.add('hidden');
+
+            // Aviso corto junto al nombre: solo cuántos faltan; el detalle queda en la sección Documentos
+            const chip = document.getElementById('detailDocsChip');
+            const pendientes = faltan.length + rechazados.length;
+            chip.classList.toggle('hidden', !pendientes || Boolean(emp.baja));
+            chip.innerHTML = `<span aria-hidden="true">📄</span> ${pendientes === 1 ? 'Falta 1 documento' : `Faltan ${pendientes} documentos`} <span class="docs-chip__ver">Ver cuáles ›</span>`;
+            chip.title = [...faltan, ...rechazados.map((n) => `${n} (rechazado)`)].join(', ');
+            const subir = puede('subirDocumentos') && !emp.baja;
+            document.getElementById('documentsList').innerHTML = DOCUMENTOS_BASICOS.map((doc) => {
+                const info = estadoDocumento(emp, doc.clave);
+                const estado = ESTADOS_DOCUMENTO[info.estado];
+                const acciones = [];
+                if (info.archivo) acciones.push(`<button class="btn btn--ghost btn--doc" type="button" data-doc-ver="${doc.clave}">Ver</button>`);
+                if (subir) acciones.push(`<button class="btn btn--ghost btn--doc" type="button" data-doc-subir="${doc.clave}">${info.archivo ? 'Reemplazar' : 'Subir'}</button>`);
+                if (puede('revisarDocumentos') && info.estado === 'entregado') {
+                    acciones.push(`<button class="btn btn--primary btn--doc" type="button" data-doc-revisar="${doc.clave}">✓ Revisado</button>`);
+                    acciones.push(`<button class="btn btn--ghost btn--doc" type="button" data-doc-rechazar="${doc.clave}">Rechazar</button>`);
+                }
+                const detalle = info.archivo
+                    ? `${escaparHtml(info.archivo.nombre)} · ${tamanoLegible(info.archivo.tamano)} · subido por ${escaparHtml(info.subidoPor)} el ${formatoFecha(aISO(new Date(info.subidoEl)))}`
+                        + (info.revisadoPor ? ` · revisado por ${escaparHtml(info.revisadoPor)}` : '')
+                    : 'Sin archivo';
+                return `<div class="document-row">
+                    <div class="document-row__info">
+                        <strong>${escaparHtml(doc.nombre)}${doc.obligatorio ? '' : ' <small>(opcional)</small>'}</strong>
+                        <span>${detalle}</span>
+                        ${info.estado === 'rechazado' ? `<span class="document-row__motivo">Rechazado: ${escaparHtml(info.motivo)}</span>` : ''}
+                    </div>
+                    <span class="doc-tag doc-tag--${estado.clase}">${estado.texto}</span>
+                    <div class="document-row__actions">${acciones.join('')}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function actualizarDocumento(emp, clave, cambios) {
+            emp.documentos = emp.documentos || {};
+            emp.documentos[clave] = { ...estadoDocumento(emp, clave), ...cambios };
+            // Aquí irá la petición a la base de datos en línea; por ahora se guarda en el navegador
+            guardarCambios();
+            renderDocumentos(emp);
+        }
+
+        async function subirDocumento(archivo) {
+            const emp = empleadoDetalle;
+            const clave = documentoPorSubir;
+            documentFileInput.value = '';
+            if (!emp || !clave) return;
+            const error = validarArchivoDocumento(archivo);
+            if (error) return mostrarToast(`⚠️ ${error}`);
+            try {
+                await AlmacenDocumentos.guardar(emp.id, clave, archivo);
+            } catch (e) {
+                return mostrarToast('⚠️ Este navegador no permite guardar archivos.');
+            }
+            const nombre = DOCUMENTOS_BASICOS.find((d) => d.clave === clave).nombre;
+            actualizarDocumento(emp, clave, {
+                estado: 'entregado',
+                archivo: { nombre: archivo.name, tamano: archivo.size, tipo: archivo.type },
+                subidoPor: USUARIO_ACTUAL.usuario,
+                subidoEl: new Date().toISOString(),
+                revisadoPor: null,
+                motivo: null
+            });
+            registrarBitacora('Documento subido', `${emp.id} · ${emp.nombre} · ${nombre}`);
+            mostrarToast(`${nombre} guardado. Queda como "Entregado" hasta que RH lo revise.`);
+        }
+
+        async function verDocumento(clave) {
+            const emp = empleadoDetalle;
+            let archivo = null;
+            try {
+                archivo = await AlmacenDocumentos.obtener(emp.id, clave);
+            } catch (e) {
+                // sin acceso al almacén
+            }
+            if (!archivo) return mostrarToast('El archivo no está en esta computadora (se subió desde otro navegador).');
+            const url = URL.createObjectURL(archivo);
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        }
+
+        document.getElementById('documentsList').addEventListener('click', (evento) => {
+            const emp = empleadoDetalle;
+            const boton = evento.target.closest('button');
+            if (!emp || !boton) return;
+            const { docVer, docSubir, docRevisar, docRechazar } = boton.dataset;
+            if (docVer) verDocumento(docVer);
+            if (docSubir && puede('subirDocumentos')) {
+                documentoPorSubir = docSubir;
+                documentFileInput.click();
+            }
+            if (docRevisar && puede('revisarDocumentos')) {
+                actualizarDocumento(emp, docRevisar, { estado: 'revisado', revisadoPor: USUARIO_ACTUAL.usuario, motivo: null });
+                registrarBitacora('Documento revisado', `${emp.id} · ${emp.nombre} · ${DOCUMENTOS_BASICOS.find((d) => d.clave === docRevisar).nombre}`);
+            }
+            if (docRechazar && puede('revisarDocumentos')) {
+                const motivo = (prompt('¿Por qué se rechaza? (ej. INE vencida, no se lee)') || '').trim();
+                if (motivo.length < 3) return;
+                actualizarDocumento(emp, docRechazar, { estado: 'rechazado', revisadoPor: USUARIO_ACTUAL.usuario, motivo });
+                registrarBitacora('Documento rechazado', `${emp.id} · ${emp.nombre} · ${DOCUMENTOS_BASICOS.find((d) => d.clave === docRechazar).nombre} · ${motivo}`);
+            }
+        });
+        documentFileInput.addEventListener('change', () => subirDocumento(documentFileInput.files[0]));
+        document.getElementById('detailDocsChip').addEventListener('click', () => {
+            document.getElementById('documentsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
 
         llenarSelect(hoursMonthSelect, MESES.map((m, i) => ({ valor: i, texto: m })));
 
@@ -1488,13 +1687,25 @@
         const recordDetail = document.getElementById('recordDetail');
         const recordVacationInfo = document.getElementById('recordVacationInfo');
         const CON_RANGO = ['vacaciones', 'permiso'];
-        const CAMPOS_REGISTRO = ['recordType', 'recordStart', 'recordEnd', 'recordDays', 'recordFolio', 'recordDetail'];
+        const CAMPOS_REGISTRO = ['recordType', 'recordStart', 'recordEnd', 'recordDays', 'recordFolio', 'recordTestigos', 'recordDetail'];
+        const recordTestigos = document.getElementById('recordTestigos');
+        // Qué hace cada tipo que no es obvio
+        const AYUDA_REGISTRO = {
+            'retardo-justificado': 'Para un retardo con causa justificada: ese día deja de contar como retardo y el trabajador no pierde el bono por puntualidad.',
+            'falta-administrativa': 'Ese día cuenta como falta: no se paga y pierde el bono. Queda como acta en su expediente; después imprímela en Solicitudes para que la firmen el trabajador y los testigos.'
+        };
+        const ETIQUETA_DETALLE = {
+            vacaciones: 'Observaciones (opcional)',
+            incapacidad: 'Observaciones (opcional)',
+            'retardo-justificado': 'Justificación *',
+            'falta-administrativa': 'Hechos *'
+        };
         const MENSAJES_REGISTRO = {
             vacaciones: 'Vacaciones registradas',
             permiso: 'Permiso registrado',
             incapacidad: 'Incapacidad registrada',
-            retardo: 'Retardo registrado',
-            falta: 'Falta registrada',
+            'retardo-justificado': 'Retardo justificado',
+            'falta-administrativa': 'Falta administrativa registrada',
             'salida-temprana': 'Salida temprana registrada'
         };
 
@@ -1528,14 +1739,18 @@
             document.getElementById('recordGoceField').classList.toggle('hidden', tipo !== 'permiso');
             document.getElementById('recordIncapacityFields').classList.toggle('hidden', tipo !== 'incapacidad');
             document.getElementById('recordDetailField').classList.toggle('hidden', !tipo);
+            document.getElementById('recordActaFields').classList.toggle('hidden', tipo !== 'falta-administrativa');
+            const ayuda = document.getElementById('recordTypeInfo');
+            ayuda.textContent = AYUDA_REGISTRO[tipo] || '';
+            ayuda.classList.toggle('hidden', !AYUDA_REGISTRO[tipo]);
             setTexto('recordStartLabel', CON_RANGO.includes(tipo) || tipo === 'incapacidad' ? 'Primer día *' : 'Fecha *');
-            setTexto('recordDetailLabel', ['vacaciones', 'incapacidad'].includes(tipo) ? 'Observaciones (opcional)' : 'Motivo *');
+            setTexto('recordDetailLabel', ETIQUETA_DETALLE[tipo] || 'Motivo *');
             actualizarInfoVacaciones();
         }
 
         function abrirRegistro() {
             const emp = empleadoDetalle;
-            if (!emp || emp.baja) return;
+            if (!emp || emp.baja || !puede('registrarIncidencias')) return;
             recordType.value = '';
             recordStart.value = HOY_ISO;
             recordStart.min = emp.ingreso;
@@ -1544,6 +1759,7 @@
             recordDays.value = '1';
             recordFolio.value = '';
             recordDetail.value = '';
+            recordTestigos.value = '';
             document.getElementById('recordGoce').value = 'con';
             document.getElementById('recordIncapacityType').selectedIndex = 0;
             document.getElementById('recordEmployee').value = `${emp.id} · ${emp.nombre}`;
@@ -1584,6 +1800,17 @@
             if (!['vacaciones', 'incapacidad'].includes(tipo) && !recordDetail.value.trim()) {
                 errores.recordDetail = 'Escribe el motivo.';
             }
+            if (tipo === 'retardo-justificado' && inicio && !errores.recordStart) {
+                const dia = inicio <= HOY_ISO ? registroDia(emp, fechaDesdeISO(inicio)) : null;
+                if (dia?.retardoJustificado) errores.recordStart = 'El retardo de ese día ya está justificado.';
+                else if (dia?.estado !== 'retardo') errores.recordStart = 'Ese día no tiene un retardo que justificar.';
+            }
+            if (tipo === 'falta-administrativa' && inicio && !errores.recordStart) {
+                const error = validarActa(emp, { fecha: inicio, hechos: recordDetail.value.trim(), testigos: recordTestigos.value });
+                if (error.includes('fecha')) errores.recordStart = error;
+                else if (error.includes('testigos')) errores.recordTestigos = error;
+                else if (error) errores.recordDetail = error;
+            }
 
             const fechasValidas = inicio && fin && !errores.recordStart && !errores.recordEnd && !errores.recordDays;
             if (tipo === 'vacaciones' && fechasValidas) {
@@ -1619,12 +1846,21 @@
                     inicio,
                     dias: Number(recordDays.value)
                 });
+            } else if (tipo === 'falta-administrativa') {
+                // Queda como acta aprobada (también aparece en Solicitudes, para imprimirla)
+                levantarActaDirecta(emp, {
+                    fecha: inicio,
+                    hechos: detalle,
+                    testigos: recordTestigos.value.trim(),
+                    cuentaComoFalta: true // una falta administrativa siempre cuenta como falta
+                });
             } else {
                 (emp.incidencias = emp.incidencias || []).push({ fecha: inicio, tipo, detalle });
             }
 
             // Aquí irá la petición a la base de datos en línea; por ahora se guarda en el navegador
             guardarCambios();
+            registrarBitacora(MENSAJES_REGISTRO[tipo], `${emp.id} · ${emp.nombre} · ${formatoFecha(inicio)}`);
             cerrarModal(recordModal);
             openEmployeeDetail(emp);
             renderTodo();
@@ -1677,6 +1913,7 @@
 
         let faceCameraStream = null;
         let currentStep = 0;
+        let empleadoEditando = null; // null = alta nueva; si no, el trabajador que se está editando
         let vectorCaptureSuccess = false;
         let precisionCaptura = null;
         const phoneCameraPattern = /\b(phone|honor|android|iphone|ipad|mobile|m[oó]vil)\b|link to windows|enlace a windows|droidcam|epoccam|camo|continuity camera|virtual camera|c[aá]mara virtual/i;
@@ -2083,7 +2320,7 @@
         }
 
         function siguienteId(suc) {
-            const usados = EMPLEADOS.filter((e) => e.suc === suc).map((e) => Number(e.id.slice(2)));
+            const usados = TODOS_EMPLEADOS.filter((e) => e.suc === suc).map((e) => Number(e.id.slice(2)));
             return suc + String(Math.max(0, ...usados) + 1).padStart(2, '0');
         }
 
@@ -2100,10 +2337,13 @@
                 : '<option value="">Primero elige el departamento</option>';
         }
 
-        // El sueldo se propone con el salario mínimo; se puede subir según el puesto, nunca bajar
+        // El sueldo se propone con el salario mínimo; se puede subir según el puesto, nunca bajar.
+        // El admin de sucursal no ve sueldos: el campo se oculta y RH asigna el definitivo.
         function prepararSueldo() {
             newSalary.min = SALARIO_MINIMO_SEMANAL;
             newSalary.value = SALARIO_MINIMO_SEMANAL.toFixed(2);
+            newSalary.closest('.field').classList.toggle('hidden', !puede('verSueldos'));
+            document.querySelectorAll('.solo-sueldos').forEach((el) => el.classList.toggle('hidden', !puede('verSueldos')));
             campo('newSalaryHint').textContent =
                 `Calculado con el salario mínimo 2026: ${formatoDinero(SALARIO_MINIMO_DIARIO)} diarios × 7 días = ${formatoDinero(SALARIO_MINIMO_SEMANAL)}. Súbelo si el puesto gana más.`;
         }
@@ -2131,7 +2371,7 @@
             if (!REGEX_CURP.test(datos.curp)) {
                 errores.curp = 'La CURP debe tener 18 caracteres con el formato oficial.';
             } else {
-                const repetido = EMPLEADOS.find((e) => e.curp === datos.curp);
+                const repetido = TODOS_EMPLEADOS.find((e) => e.curp === datos.curp && e !== empleadoEditando);
                 if (repetido) errores.curp = `Ya existe un trabajador con esta CURP (ID ${repetido.id}).`;
             }
             if (!REGEX_RFC.test(datos.rfc)) errores.rfc = 'El RFC debe tener 13 caracteres (con homoclave).';
@@ -2193,7 +2433,8 @@
                     marcarError('newBirthDate', e.fechaNacimiento),
                     marcarError('newPhone', e.telefono)
                 ].every(Boolean);
-                if (!vectorCaptureSuccess) {
+                // Al editar no se vuelve a pedir el rostro: ya quedó registrado en el alta
+                if (!vectorCaptureSuccess && !empleadoEditando) {
                     setVectorFeedback('danger', 'Registro de rostro pendiente', 'Activa la cámara y registra el rostro del trabajador antes de continuar.');
                     return false;
                 }
@@ -2236,16 +2477,16 @@
                         ${item('Fecha de ingreso', formatoFecha(d.ingreso))}
                         ${item('Departamento', d.depto)}
                         ${item('Puesto', d.puesto)}
-                        ${item('Sueldo semanal', formatoDinero(d.sueldo))}
+                        ${item('Sueldo semanal', puede('verSueldos') ? formatoDinero(d.sueldo) : 'Lo asigna Recursos Humanos')}
                     </div>
                 </div>
-                <div class="summary-section">
+                ${empleadoEditando ? '' : `<div class="summary-section">
                     <h5>Rostro</h5>
                     <div class="profile-grid">
                         ${item('Registro facial', vectorCaptureSuccess ? 'Registrado ✓' : 'Pendiente')}
                         ${item('Precisión biométrica', precisionCaptura || '—')}
                     </div>
-                </div>
+                </div>`}
             `;
         }
 
@@ -2256,7 +2497,7 @@
             if (stepIndex === wizardPanels.length - 1) renderResumen();
 
             prevStepBtn.classList.toggle('hidden', stepIndex === 0);
-            nextStepBtn.textContent = stepIndex === wizardPanels.length - 1 ? 'Guardar Nuevo Ingreso' : 'Siguiente';
+            nextStepBtn.textContent = stepIndex < wizardPanels.length - 1 ? 'Siguiente' : empleadoEditando ? 'Guardar cambios' : 'Guardar Nuevo Ingreso';
         }
 
         function limpiarFormulario() {
@@ -2265,20 +2506,76 @@
             document.querySelectorAll('#employeeModal .is-invalid').forEach((el) => el.classList.remove('is-invalid'));
             document.querySelectorAll('#employeeModal .field-error').forEach((el) => { el.textContent = ''; });
 
-            const esAdmin = USUARIO_ACTUAL.rol === 'admin';
+            const eligeSucursal = puede('elegirSucursalAlta');
             newBranch.value = USUARIO_ACTUAL.sucursal;
-            newBranch.disabled = !esAdmin;
-            campo('newBranchHint').textContent = esAdmin
-                ? 'Como administrador puedes elegir la sucursal.'
-                : 'Se asigna tu sucursal. Solo el administrador puede cambiarla.';
+            newBranch.disabled = !eligeSucursal;
+            campo('newBranchHint').textContent = eligeSucursal
+                ? 'Puedes elegir la sucursal.'
+                : 'Se asigna tu sucursal. Solo Recursos Humanos puede cambiarla.';
             newDepartment.value = '';
             llenarPuestos();
             actualizarIdAutomatico();
             prepararSueldo();
         }
 
-        async function openEmployeeModal() {
+        // Separa "Nombre(s) Paterno Materno" cuando el trabajador se registró con el nombre en un solo campo
+        function partesDelNombre(emp) {
+            if (emp.apellidoPaterno) return { nombres: emp.nombres || '', apellidoPaterno: emp.apellidoPaterno, apellidoMaterno: emp.apellidoMaterno || '' };
+            const palabras = emp.nombre.trim().split(/\s+/);
+            if (palabras.length < 3) return { nombres: palabras[0] || '', apellidoPaterno: palabras[1] || '', apellidoMaterno: '' };
+            return { nombres: palabras.slice(0, -2).join(' '), apellidoPaterno: palabras[palabras.length - 2], apellidoMaterno: palabras[palabras.length - 1] };
+        }
+
+        // La CURP trae la fecha de nacimiento (AAMMDD) después de las 4 letras iniciales
+        function nacimientoDesdeCurp(curp) {
+            const partes = /^[A-Z]{4}(\d{2})(\d{2})(\d{2})/.exec(curp || '');
+            if (!partes) return '';
+            const siglo = Number(partes[1]) > HOY.getFullYear() % 100 ? 1900 : 2000;
+            return `${siglo + Number(partes[1])}-${partes[2]}-${partes[3]}`;
+        }
+
+        // Llena el formulario con los datos actuales del trabajador que se va a editar
+        function llenarFormularioEdicion(emp) {
+            const nombre = partesDelNombre(emp);
+            campo('newLastName1').value = nombre.apellidoPaterno;
+            campo('newLastName2').value = nombre.apellidoMaterno;
+            campo('newFirstNames').value = nombre.nombres;
+            campo('newCurp').value = emp.curp || '';
+            campo('newRfc').value = emp.rfc || '';
+            campo('newBirthDate').value = emp.fechaNacimiento || nacimientoDesdeCurp(emp.curp);
+            campo('newPhone').value = emp.telefono || '';
+            campo('newId').value = emp.id;
+            // El ID se forma con la sucursal: si se cambiara, el ID dejaría de corresponder
+            newBranch.value = emp.suc;
+            newBranch.disabled = true;
+            campo('newBranchHint').textContent = 'La sucursal no se cambia al editar: el ID del trabajador depende de ella.';
+            campo('newHireDate').value = emp.ingreso;
+            newDepartment.value = emp.depto;
+            llenarPuestos();
+            newRole.value = emp.puesto;
+            newSalary.value = emp.sueldo;
+        }
+
+        // El mismo formulario sirve para el alta y para editar: aquí se ajustan los textos y lo que se muestra
+        function ajustarModoFormulario() {
+            const editando = Boolean(empleadoEditando);
+            setTexto('employeeModalEyebrow', editando ? 'Editar trabajador' : 'Agregar Nuevo Ingreso');
+            setTexto('employeeModalTitle', editando ? `${empleadoEditando.id} · ${empleadoEditando.nombre}` : 'Alta de Nuevo colaborador');
+            document.querySelector('#employeeModal .photo-box').classList.toggle('hidden', editando);
+            document.querySelector('#employeeModal .connection-pill').classList.toggle('hidden', editando);
+            document.querySelector('#employeeModal .form-instructions').classList.toggle('hidden', editando);
+            document.querySelector('#employeeModal .form-layout').classList.toggle('form-layout--sin-rostro', editando);
+            campo('summaryIntro').innerHTML = editando
+                ? '<strong>Resumen de los cambios:</strong> revisa que todo sea correcto. Al presionar <strong>Guardar cambios</strong> se te pedirá confirmar antes de guardar.'
+                : '<strong>Resumen del nuevo ingreso:</strong> revisa que todo sea correcto. Al presionar <strong>Guardar Nuevo Ingreso</strong> se te pedirá confirmar antes de guardar.';
+        }
+
+        // Sin trabajador abre el alta; con trabajador, la edición de sus datos
+        async function openEmployeeModal(emp = null) {
+            empleadoEditando = emp;
             limpiarFormulario();
+            if (emp) llenarFormularioEdicion(emp);
+            ajustarModoFormulario();
             abrirModal(modal);
             await resetFaceCapture();
             renderStep(0);
@@ -2287,10 +2584,12 @@
         async function closeEmployeeModal() {
             await resetFaceCapture();
             cerrarModal(modal);
+            empleadoEditando = null;
         }
 
         // Catálogos del formulario
         llenarSelect(newBranch, listaSucursales().map(({ clave, nombre }) => ({ valor: clave, texto: `${clave} - ${nombre}` })));
+        fijarSucursalUnica(newBranch);
         newDepartment.innerHTML = '<option value="">Selecciona el departamento</option>' +
             [...new Set(DEPARTAMENTOS.map((d) => d.grupo))].map((grupo) => `
                 <optgroup label="${grupo}">
@@ -2303,7 +2602,10 @@
         newBranch.addEventListener('change', actualizarIdAutomatico);
         newDepartment.addEventListener('change', llenarPuestos);
 
-        document.getElementById('openNewEmployeeModal').addEventListener('click', openEmployeeModal);
+        document.getElementById('openNewEmployeeModal').addEventListener('click', () => openEmployeeModal());
+        document.getElementById('editEmployeeBtn').addEventListener('click', () => {
+            if (empleadoDetalle && puede('editarTrabajador')) openEmployeeModal(empleadoDetalle);
+        });
         document.getElementById('cancelEmployeeModal').addEventListener('click', closeEmployeeModal);
         startFaceCameraBtn.addEventListener('click', startFaceCamera);
         faceCameraSelect.addEventListener('change', () => {
@@ -2354,22 +2656,108 @@
             [saveCancelBtn, saveConfirmBtn, saveRetryBtn, saveDoneBtn].forEach((b) => b.classList.toggle('hidden', !visibles.includes(b)));
         }
 
-        function abrirConfirmacionGuardado() {
-            const d = leerFormulario();
-            document.getElementById('saveConfirmText').innerHTML =
-                `Se dará de alta a <strong>${escaparHtml(d.nombre)}</strong> con ID <strong>${d.id}</strong> en la sucursal <strong>${escaparHtml(nombreSucursal(d.suc))}</strong>.`;
+        // Lo que se está por hacer: { titulo, texto, si, peligro, progreso, pasos, listo, exito, alTerminar }
+        let accionPendiente = null;
+
+        function pedirConfirmacion(accion) {
+            accionPendiente = accion;
+            setTexto('saveTitle', accion.titulo);
+            document.getElementById('saveConfirmText').innerHTML = accion.texto;
             saveConfirm.classList.remove('hidden');
             saveProgress.classList.add('hidden');
-            saveCancelBtn.textContent = 'No, revisar';
+            saveCancelBtn.textContent = accion.no || 'No, revisar';
+            saveConfirmBtn.textContent = accion.si;
+            saveConfirmBtn.classList.toggle('btn--peligro', Boolean(accion.peligro));
             mostrarBotonesGuardado([saveCancelBtn, saveConfirmBtn]);
             abrirModal(saveModal);
+        }
+
+        // Lo que cambió al editar, para mostrarlo antes de guardar y anotarlo en la bitácora
+        function cambiosDeEdicion(emp, d) {
+            const antes = {
+                nombre: emp.nombre, curp: emp.curp, rfc: emp.rfc,
+                fechaNacimiento: emp.fechaNacimiento || nacimientoDesdeCurp(emp.curp),
+                telefono: emp.telefono, ingreso: emp.ingreso, depto: emp.depto, puesto: emp.puesto, sueldo: emp.sueldo
+            };
+            const campos = [
+                ['nombre', 'Nombre'], ['curp', 'CURP'], ['rfc', 'RFC'], ['fechaNacimiento', 'Fecha de nacimiento', formatoFecha],
+                ['telefono', 'Teléfono', formatoTelefono], ['ingreso', 'Fecha de ingreso', formatoFecha],
+                ['depto', 'Departamento'], ['puesto', 'Puesto'], ['sueldo', 'Sueldo semanal', formatoDinero]
+            ];
+            return campos
+                .filter(([clave]) => String(antes[clave] ?? '') !== String(d[clave] ?? ''))
+                .map(([clave, texto, formato = (v) => v]) => `${texto}: ${antes[clave] ? formato(antes[clave]) : '—'} → ${formato(d[clave])}`);
+        }
+
+        function abrirConfirmacionGuardado() {
+            const d = leerFormulario();
+            if (empleadoEditando) return confirmarEdicion(empleadoEditando, d);
+            pedirConfirmacion({
+                titulo: '¿Estás seguro de guardar?',
+                texto: `Se dará de alta a <strong>${escaparHtml(d.nombre)}</strong> con ID <strong>${d.id}</strong> en la sucursal <strong>${escaparHtml(nombreSucursal(d.suc))}</strong>.`,
+                si: 'Sí, guardar',
+                progreso: 'Guardando nuevo ingreso…',
+                pasos: () => [
+                    { texto: 'Validando la información', accion: () => validarAntesDeGuardar(d) },
+                    { texto: 'Guardando datos personales y laborales', accion: () => guardarTrabajador(d) },
+                    { texto: 'Registrando el rostro en las checadoras', accion: () => wait(600) }
+                ],
+                listo: 'Guardado completado',
+                exito: `✅ <strong>${escaparHtml(d.nombre)}</strong> se guardó correctamente con ID <strong>${d.id}</strong>.`,
+                alTerminar: async () => {
+                    await closeEmployeeModal();
+                    renderTodo();
+                }
+            });
+        }
+
+        function confirmarEdicion(emp, d) {
+            const cambios = cambiosDeEdicion(emp, d);
+            if (!cambios.length) {
+                pedirConfirmacion({
+                    titulo: 'No cambiaste ningún dato',
+                    texto: `Los datos de <strong>${escaparHtml(emp.nombre)}</strong> están igual que antes. ¿Quieres cerrar sin guardar?`,
+                    si: 'Sí, cerrar',
+                    no: 'Seguir editando',
+                    progreso: 'Cerrando…', pasos: () => [], listo: 'Sin cambios',
+                    exito: 'No se modificó nada.',
+                    alTerminar: closeEmployeeModal
+                });
+                return;
+            }
+            pedirConfirmacion({
+                titulo: '¿Estás seguro de guardar los cambios?',
+                texto: `Se actualizarán los datos de <strong>${escaparHtml(emp.nombre)}</strong> (ID <strong>${emp.id}</strong>):
+                    <ul class="confirm-cambios">${cambios.map((c) => `<li>${escaparHtml(c)}</li>`).join('')}</ul>`,
+                si: 'Sí, guardar',
+                progreso: 'Guardando los cambios…',
+                pasos: () => [
+                    { texto: 'Validando la información', accion: () => validarAntesDeGuardar(d) },
+                    { texto: 'Guardando los datos del trabajador', accion: () => actualizarTrabajador(emp, d, cambios) },
+                    { texto: 'Actualizando la ficha y las listas', accion: () => wait(400) }
+                ],
+                listo: 'Cambios guardados',
+                exito: `✅ Los datos de <strong>${escaparHtml(d.nombre)}</strong> se actualizaron.`,
+                alTerminar: async () => {
+                    await closeEmployeeModal();
+                    renderTodo();
+                    openEmployeeDetail(emp);
+                }
+            });
+        }
+
+        async function validarAntesDeGuardar(datos) {
+            await wait(500);
+            const errores = { ...validarDatosPersonales(datos), ...validarDatosLaborales(datos) };
+            const primero = Object.values(errores)[0];
+            if (primero) throw new Error(primero);
         }
 
         // Aquí se conectará la base de datos en línea (petición a la API).
         // Por ahora se guarda en la lista local para poder probar el flujo completo.
         async function guardarTrabajador(datos) {
             await wait(700);
-            if (EMPLEADOS.some((e) => e.curp === datos.curp)) {
+            if (TODOS_EMPLEADOS.some((e) => e.curp === datos.curp)) {
                 throw new Error('Ya existe un trabajador registrado con esta CURP.');
             }
             EMPLEADOS.push({
@@ -2389,26 +2777,107 @@
                 sueldo: datos.sueldo
             });
             guardarCambios();
+            registrarBitacora('Alta de trabajador', `${datos.id} · ${datos.nombre} · ${nombreSucursal(datos.suc)}`);
+        }
+
+        // Editar: cambia solo sus datos; el ID, la sucursal y todo su historial se conservan
+        async function actualizarTrabajador(emp, datos, cambios) {
+            await wait(700);
+            if (!puede('editarTrabajador')) throw new Error('Tu usuario no puede editar trabajadores.');
+            Object.assign(emp, {
+                nombre: datos.nombre,
+                apellidoPaterno: datos.apellidoPaterno,
+                apellidoMaterno: datos.apellidoMaterno,
+                nombres: datos.nombres,
+                depto: datos.depto,
+                puesto: datos.puesto,
+                ingreso: datos.ingreso,
+                telefono: datos.telefono,
+                curp: datos.curp,
+                rfc: datos.rfc,
+                fechaNacimiento: datos.fechaNacimiento,
+                sueldo: datos.sueldo
+            });
+            guardarCambios();
+            registrarBitacora('Trabajador modificado', `${emp.id} · ${emp.nombre} · ${cambios.join('; ')}`);
+        }
+
+        // Borrar: quita al trabajador y todo lo suyo (no es una baja, que sí conserva el historial)
+        async function borrarTrabajador(emp) {
+            await wait(600);
+            if (!puede('borrarTrabajador')) throw new Error('Tu usuario no puede borrar trabajadores.');
+            [TODOS_EMPLEADOS, EMPLEADOS].forEach((lista) => {
+                const indice = lista.indexOf(emp);
+                if (indice >= 0) lista.splice(indice, 1);
+            });
+            guardarCambios();
+            guardarSolicitudes(listaSolicitudes().filter((s) => s.empleado !== emp.id));
+            guardarReportes(listaReportes().filter((r) => r.empleado !== emp.id));
+            registrarBitacora('Trabajador borrado', `${emp.id} · ${emp.nombre} · ${nombreSucursal(emp.suc)}`);
+        }
+
+        // Los archivos del expediente y los certificados del IMSS guardados en este navegador
+        async function borrarArchivosDe(emp) {
+            const claves = Object.keys(emp.documentos || {})
+                .concat((emp.incapacidades || []).filter((i) => i.archivo).map((i) => i.archivo.clave));
+            for (const clave of claves) {
+                try {
+                    await AlmacenDocumentos.borrar(emp.id, clave);
+                } catch (error) {
+                    // Sin acceso al almacén de archivos: no hay nada que borrar
+                }
+            }
+            await wait(300);
+        }
+
+        function confirmarBorrado(emp) {
+            const tiene = [];
+            if ((emp.vacaciones || []).length) tiene.push('vacaciones');
+            if ((emp.incapacidades || []).length) tiene.push('incapacidades');
+            if ((emp.permisos || []).length || (emp.incidencias || []).length || (emp.actas || []).length) tiene.push('permisos e incidencias');
+            if ((emp.bonos || []).length || (emp.recibos || []).length) tiene.push('recibos y bonos');
+            if (Object.keys(emp.documentos || {}).length) tiene.push('documentos');
+            pedirConfirmacion({
+                titulo: '¿Estás seguro de borrar a este trabajador?',
+                texto: `Se borrará a <strong>${escaparHtml(emp.nombre)}</strong> (ID <strong>${emp.id}</strong>) con todo su historial${tiene.length ? `: ${tiene.join(', ')}` : ''}, sus asistencias y sus solicitudes.
+                    <span class="confirm-aviso">Esto no se puede deshacer. Si la persona solo dejó de trabajar aquí, lo correcto es darla de baja: la baja conserva su historial.</span>`,
+                si: 'Sí, borrar',
+                no: 'No, cancelar',
+                peligro: true,
+                progreso: 'Borrando al trabajador…',
+                pasos: () => [
+                    { texto: 'Borrando sus datos, solicitudes y reportes', accion: () => borrarTrabajador(emp) },
+                    { texto: 'Borrando sus documentos guardados', accion: () => borrarArchivosDe(emp) },
+                    { texto: 'Actualizando la lista de empleados', accion: () => wait(300) }
+                ],
+                listo: 'Trabajador borrado',
+                exito: `✅ <strong>${escaparHtml(emp.nombre)}</strong> (ID ${emp.id}) se borró del sistema.`,
+                alTerminar: () => {
+                    empleadoDetalle = null;
+                    detailPanel.classList.add('hidden');
+                    detailPanel.setAttribute('aria-hidden', 'true');
+                    renderTodo();
+                }
+            });
         }
 
         async function ejecutarGuardado() {
-            const datos = leerFormulario();
+            const accion = accionPendiente;
+            if (!accion) return;
+            // Sin nada que guardar (por ejemplo, al editar sin cambiar datos) se termina de una vez
+            if (!accion.pasos().length) {
+                accionPendiente = null;
+                cerrarModal(saveModal);
+                await accion.alTerminar();
+                return;
+            }
             saveConfirm.classList.add('hidden');
             saveProgress.classList.remove('hidden');
             saveResult.className = 'form-message hidden';
-            document.getElementById('saveProgressTitle').textContent = 'Guardando nuevo ingreso…';
+            document.getElementById('saveProgressTitle').textContent = accion.progreso;
             mostrarBotonesGuardado([]);
 
-            const pasos = [
-                { texto: 'Validando la información', accion: async () => {
-                    await wait(500);
-                    const errores = { ...validarDatosPersonales(datos), ...validarDatosLaborales(datos) };
-                    const primero = Object.values(errores)[0];
-                    if (primero) throw new Error(primero);
-                } },
-                { texto: 'Guardando datos personales y laborales', accion: () => guardarTrabajador(datos) },
-                { texto: 'Registrando el rostro en las checadoras', accion: () => wait(600) }
-            ];
+            const pasos = accion.pasos();
             saveSteps.innerHTML = pasos.map((p) => `<li><span class="save-step__icon"></span>${p.texto}</li>`).join('');
             const elementos = [...saveSteps.children];
 
@@ -2429,8 +2898,8 @@
                 }
             }
 
-            document.getElementById('saveProgressTitle').textContent = 'Guardado completado';
-            mostrarMensaje(saveResult, 'success', `✅ <strong>${escaparHtml(datos.nombre)}</strong> se guardó correctamente con ID <strong>${datos.id}</strong>.`);
+            document.getElementById('saveProgressTitle').textContent = accion.listo;
+            mostrarMensaje(saveResult, 'success', accion.exito);
             mostrarBotonesGuardado([saveDoneBtn]);
         }
 
@@ -2438,9 +2907,13 @@
         saveConfirmBtn.addEventListener('click', ejecutarGuardado);
         saveRetryBtn.addEventListener('click', ejecutarGuardado);
         saveDoneBtn.addEventListener('click', async () => {
+            const accion = accionPendiente;
+            accionPendiente = null;
             cerrarModal(saveModal);
-            await closeEmployeeModal();
-            renderTodo();
+            if (accion) await accion.alTerminar();
+        });
+        document.getElementById('deleteEmployeeBtn').addEventListener('click', () => {
+            if (empleadoDetalle && puede('borrarTrabajador')) confirmarBorrado(empleadoDetalle);
         });
 
         // =====================================================================
@@ -2549,8 +3022,13 @@
                     ingreso: fechaImportada(valor(fila, 'Fecha de ingreso')),
                     sueldo: parseFloat(String(valor(fila, 'Sueldo semanal')).replace(/[$,\s]/g, ''))
                 };
+                // El admin no captura sueldos: se registra con el mínimo y RH lo ajusta
+                if (!puede('verSueldos')) datos.sueldo = SALARIO_MINIMO_SEMANAL;
                 const mensajes = Object.values({ ...validarDatosPersonales(datos), ...validarDatosLaborales(datos) });
                 if (depto && !puesto) mensajes.push(`El puesto "${puestoTexto}" no pertenece a ${depto.nombre}.`);
+                if (datos.suc && !puede('elegirSucursalAlta') && datos.suc !== USUARIO_ACTUAL.sucursal) {
+                    mensajes.push(`Solo puedes importar trabajadores de tu sucursal (${nombreSucursal(USUARIO_ACTUAL.sucursal)}).`);
+                }
                 if (curpsArchivo.has(datos.curp)) mensajes.push('La CURP está repetida en el archivo.');
                 curpsArchivo.add(datos.curp);
 
@@ -2612,6 +3090,7 @@
                 EMPLEADOS.push({ ...datos, id: siguienteId(datos.suc), rostroPendiente: true });
             });
             guardarCambios();
+            registrarBitacora('Importación de trabajadores', `${cantidad} trabajador${cantidad === 1 ? '' : 'es'}`);
             importacionPendiente = [];
             confirmImport.disabled = true;
             confirmImport.textContent = 'Importar';
@@ -2619,6 +3098,9 @@
             importResult.innerHTML = `<p class="form-message is-success">✅ Se importaron <strong>${cantidad}</strong> trabajador${cantidad === 1 ? '' : 'es'}. Recuerda registrar su rostro para que puedan checar.</p>`;
             renderTodo();
         });
+
+        // El Super usuario entra a Incapacidades desde el menú: aquí no ve el acceso directo
+        document.getElementById('incapacidadesLink').classList.toggle('hidden', USUARIO_ACTUAL.rol === 'super');
 
         // Si se llega con ?id=XXXX (p. ej. desde Incapacidades), se abre directo su expediente
         const idSolicitado = new URLSearchParams(location.search).get('id');

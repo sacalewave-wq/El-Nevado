@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="recursos/main.css">
     <link rel="stylesheet" href="recursos/inicio.css">
     <link rel="stylesheet" href="recursos/configuracion.css">
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body class="page-configuracion">
@@ -69,6 +71,7 @@
                 <div>
                     <h1>Configuración del Sistema</h1>
                     <p>Reglas que usa el sistema para calcular la asistencia y la nómina.</p>
+                    <p class="readonly-note hidden" id="readonlyNote">🔒 Solo lectura: únicamente el Super usuario puede cambiar las reglas.</p>
                 </div>
 
                 <div class="configuration-header__actions">
@@ -90,7 +93,7 @@
                         <span class="config-icon">⚖️</span>
                         <div>
                             <h3>Políticas de Asistencia</h3>
-                            <p>Tolerancia de entrada y descuento por retardos</p>
+                            <p>Tolerancia de entrada y retardos</p>
                         </div>
                     </div>
 
@@ -100,13 +103,6 @@
                             <div class="input-suffix">
                                 <input id="toleranciaMinutos" type="number" min="0" max="60" step="1">
                                 <span>min</span>
-                            </div>
-                        </div>
-                        <div class="form-field">
-                            <label for="retardosPermitidosSemana">Retardos permitidos por semana</label>
-                            <div class="input-suffix">
-                                <input id="retardosPermitidosSemana" type="number" min="0" max="6" step="1">
-                                <span>retardos</span>
                             </div>
                         </div>
                     </div>
@@ -124,9 +120,10 @@
                     </div>
 
                     <ul class="info-list">
-                        <li><span>Lunes a viernes</span><strong>08:00 – 17:00 (1 h de comida)</strong></li>
+                        <li><span>Lunes a viernes</span><strong>08:00 – 18:00 (1 h de comida)</strong></li>
                         <li><span>Sábado</span><strong>08:00 – 14:00</strong></li>
                         <li><span>Domingo</span><strong>Descanso semanal</strong></li>
+                        <li><span>Horas extra</span><strong>Solo horas completas después de la salida (19:01 a 20:00 = 1 h)</strong></li>
                         <li><span>Descansos obligatorios</span><strong>Según la Ley Federal del Trabajo</strong></li>
                     </ul>
                     <div class="hint-box">El calendario de descansos obligatorios del año está al final de la página de <a href="vacaciones.html">Vacaciones</a>.</div>
@@ -168,13 +165,20 @@
                             <label for="salarioMinimoSemanal">Salario mínimo semanal (× 7 días)</label>
                             <input id="salarioMinimoSemanal" type="text" readonly>
                         </div>
-                        <div class="form-field field-full">
+                        <div class="form-field">
+                            <label for="bonoPuntualidad">Bono por puntualidad (por semana)</label>
+                            <div class="input-suffix input-suffix--prefix">
+                                <span>$</span>
+                                <input id="bonoPuntualidad" type="number" min="0" step="1">
+                            </div>
+                        </div>
+                        <div class="form-field">
                             <label for="zonaSalarial">Zona salarial</label>
                             <input id="zonaSalarial" type="text" value="General (todas las sucursales están en el Estado de México)" readonly>
                         </div>
                     </div>
 
-                    <div class="hint-box">El salario mínimo semanal es el sueldo más bajo permitido al dar de alta a un trabajador en Empleados.</div>
+                    <div class="hint-box">El salario mínimo semanal es el sueldo más bajo permitido al dar de alta a un trabajador en Empleados. El bono se propone a quien no tuvo retardos ni faltas en la semana; solo el Super usuario lo otorga en Nómina.</div>
                 </div>
 
                 <div class="config-card">
@@ -199,8 +203,8 @@
     <script>
         const CAMPOS_NUMERICOS = {
             toleranciaMinutos: { min: 0, max: 60, decimales: false, nombre: 'La tolerancia' },
-            retardosPermitidosSemana: { min: 0, max: 6, decimales: false, nombre: 'Los retardos permitidos' },
-            salarioMinimoDiario: { min: 1, max: 5000, decimales: true, nombre: 'El salario mínimo' }
+            salarioMinimoDiario: { min: 1, max: 5000, decimales: true, nombre: 'El salario mínimo' },
+            bonoPuntualidad: { min: 0, max: 10000, decimales: false, nombre: 'El bono por puntualidad' }
         };
         const campo = (id) => document.getElementById(id);
 
@@ -224,27 +228,25 @@
             actualizarVistaPrevia();
         }
 
-        const ordinal = (n) => `${n}.º`;
-
         // Textos que explican, con los valores escritos, cómo se aplicará cada regla
         function actualizarVistaPrevia() {
             const v = leerFormulario();
             const tolerancia = Number.isFinite(v.toleranciaMinutos) ? v.toleranciaMinutos : 0;
-            const permitidos = Number.isFinite(v.retardosPermitidosSemana) ? v.retardosPermitidosSemana : 0;
             const limite = `08:${String(Math.min(59, tolerancia)).padStart(2, '0')}`;
             const retardoDesde = `08:${String(Math.min(59, tolerancia + 1)).padStart(2, '0')}`;
 
             campo('politicaResumen').innerHTML = `
                 Entrada a las 08:00: quien checa a las <strong>${limite}</strong> o antes llega a tiempo; desde las <strong>${retardoDesde}</strong> es retardo.<br>
-                Se permiten <strong>${permitidos}</strong> retardo${permitidos === 1 ? '' : 's'} por semana (sábado a viernes);
-                el <strong>${ordinal(permitidos + 1)} retardo descuenta 1 día completo</strong> de sueldo.`;
+                Los retardos <strong>no descuentan sueldo</strong>: se registran para que RH hable con el trabajador y quitan el bono por puntualidad de esa semana.`;
 
             const semanal = (v.salarioMinimoDiario || 0) * 7;
             campo('salarioMinimoSemanal').value = formatoDinero(semanal);
             campo('reglasNomina').innerHTML = `
                 <li><span>Días pagados por semana</span><strong>7 (incluye el domingo)</strong></li>
                 <li><span>Falta sin justificar</span><strong>Se descuenta 1 día</strong></li>
-                <li><span>Retardos</span><strong>El ${ordinal(permitidos + 1)} de la semana descuenta 1 día</strong></li>
+                <li><span>Retardos</span><strong>No descuentan; RH habla con el trabajador</strong></li>
+                <li><span>Horas extra</span><strong>Primeras 9 de la semana al doble; las siguientes al triple</strong></li>
+                <li><span>Bono por puntualidad</span><strong>${formatoDinero(v.bonoPuntualidad || 0)} sin retardos ni faltas (lo otorga el Super usuario)</strong></li>
                 <li><span>Permiso sin goce</span><strong>Se descuentan los días del permiso</strong></li>
                 <li><span>Descanso obligatorio trabajado</span><strong>Salario doble adicional</strong></li>
                 <li><span>Día de pago</span><strong>${escaparHtml(v.diaPago)}</strong></li>`;
@@ -267,6 +269,7 @@
         }
 
         function guardar() {
+            if (!puede('editarConfiguracion')) return;
             const valores = leerFormulario();
             const error = validar(valores);
             if (error) {
@@ -278,6 +281,8 @@
                 mostrarToast('⚠️ Este navegador no permite guardar la configuración.');
                 return;
             }
+            const cambios = Object.keys(valores).filter((clave) => String(valores[clave]) !== String(CONFIGURACION[clave]));
+            registrarBitacora('Configuración modificada', cambios.map((clave) => `${clave}: ${CONFIGURACION[clave]} → ${valores[clave]}`).join(' · ') || 'Sin cambios');
             Object.assign(CONFIGURACION, valores);
             actualizarVistaPrevia();
             mostrarToast('✅ Configuración guardada. Se aplica en todas las páginas.');
@@ -304,6 +309,14 @@
 
         campo('headerDate').textContent = fechaLarga(HOY);
         llenarFormulario(CONFIGURACION);
+
+        // RH ve las reglas pero no las cambia
+        if (!puede('editarConfiguracion')) {
+            document.querySelectorAll('.settings-panel input, .settings-panel select').forEach((el) => { el.disabled = true; });
+            campo('saveBtn').classList.add('hidden');
+            campo('discardBtn').classList.add('hidden');
+            campo('readonlyNote').classList.remove('hidden');
+        }
     </script>
     <script src="recursos/estado-servidor.js"></script>
 </body>

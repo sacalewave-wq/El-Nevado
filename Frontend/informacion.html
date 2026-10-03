@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="recursos/main.css">
     <link rel="stylesheet" href="recursos/inicio.css">
     <link rel="stylesheet" href="recursos/configuracion.css">
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body class="page-configuracion page-informacion">
@@ -145,7 +147,7 @@
                             <button class="btn btn--primary btn--small config-card__action" type="button" id="addBranchBtn">+ Agregar sucursal</button>
                         </div>
 
-                        <!-- Formulario para agregar una sucursal (solo administrador) -->
+                        <!-- Formulario para agregar una sucursal (solo Super usuario y RH) -->
                         <div class="branch-form hidden" id="branchForm">
                             <div class="config-form-grid">
                                 <div class="form-field">
@@ -187,7 +189,6 @@
     <script>
         const campo = (id) => document.getElementById(id);
         const activos = () => EMPLEADOS.filter((e) => !e.baja);
-        const esAdmin = USUARIO_ACTUAL.rol === 'admin';
 
         function mostrarToast(texto) {
             const toast = campo('toast');
@@ -248,12 +249,13 @@
             campo('domicilioFiscal').value = EMPRESA.domicilioFiscal;
             campo('sucursalPrincipal').value = nombreSucursal(EMPRESA.sucursalPrincipal);
 
-            const permitidos = CONFIGURACION.retardosPermitidosSemana;
             campo('politicasVigentes').innerHTML = `
                 <li><span>Horario</span><strong>${EMPRESA.horario}</strong></li>
                 <li><span>Periodo de nómina</span><strong>${EMPRESA.periodoNomina} · pago en ${CONFIGURACION.diaPago.toLowerCase()}</strong></li>
                 <li><span>Tolerancia de entrada</span><strong>${CONFIGURACION.toleranciaMinutos} minutos</strong></li>
-                <li><span>Retardos</span><strong>${permitidos} permitidos por semana; el ${permitidos + 1}.º descuenta 1 día completo</strong></li>
+                <li><span>Retardos</span><strong>No descuentan; RH habla con el trabajador</strong></li>
+                <li><span>Horas extra</span><strong>Horas completas después de la salida; al doble (al triple después de 9 a la semana)</strong></li>
+                <li><span>Bono por puntualidad</span><strong>${formatoDinero(CONFIGURACION.bonoPuntualidad)} por semana sin retardos ni faltas</strong></li>
                 <li><span>Salario mínimo</span><strong>${formatoDinero(SALARIO_MINIMO_DIARIO)} diarios · ${formatoDinero(SALARIO_MINIMO_SEMANAL)} semanales</strong></li>`;
         }
 
@@ -309,6 +311,7 @@
 
             // Aquí irá la petición a la base de datos en línea; por ahora se guarda en el navegador
             agregarSucursal(clave, nombre);
+            registrarBitacora('Sucursal agregada', `${clave} - ${nombre}`);
             cerrarFormulario();
             renderTodo();
             mostrarToast(`✅ Sucursal ${clave} - ${nombre} agregada. Ya aparece en los filtros y en el alta de trabajadores.`);
@@ -322,8 +325,8 @@
         }
 
         campo('headerDate').textContent = fechaLarga(HOY);
-        // Solo el administrador puede agregar sucursales
-        campo('addBranchBtn').classList.toggle('hidden', !esAdmin);
+        // Solo Super usuario y RH pueden agregar sucursales
+        campo('addBranchBtn').classList.toggle('hidden', !puede('editarSucursales'));
         campo('addBranchBtn').addEventListener('click', abrirFormulario);
         campo('cancelBranchBtn').addEventListener('click', cerrarFormulario);
         campo('saveBranchBtn').addEventListener('click', guardarSucursal);

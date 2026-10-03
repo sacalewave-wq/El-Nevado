@@ -484,13 +484,13 @@ body.page-vacaciones {
 }
 
 .reason-pill--vacation {
-    background: #ede9fe;
-    color: #5b21b6;
+    background: var(--vacaciones-bg);
+    color: var(--vacaciones-tx);
 }
 
 .reason-pill--incapacity {
-    background: #fce7f3;
-    color: #be185d;
+    background: var(--incapacidad-bg);
+    color: var(--incapacidad-tx);
 }
 
 .reason-note {
@@ -772,5 +772,169 @@ body.page-vacaciones {
 @media (max-width: 640px) {
     .search-box--compact input {
         width: 100%;
+    }
+}
+
+/* ===============================
+   VACACIONES DEL TRABAJADOR (ventana)
+================================ */
+.page-vacaciones .hidden {
+    display: none !important;
+}
+
+.page-vacaciones .expediente-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.5);
+}
+
+.page-vacaciones .expediente-modal__caja {
+    width: min(760px, 100%);
+    max-height: 100%;
+    overflow: auto;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+
+.page-vacaciones .expediente-modal__encabezado {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #edf2f7;
+}
+
+.page-vacaciones .expediente-modal__encabezado > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+}
+
+.page-vacaciones .expediente-avatar {
+    flex: none;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.page-vacaciones .expediente-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.page-vacaciones .expediente-modal__encabezado h3 {
+    margin: 2px 0;
+    font-size: 20px;
+    color: #0f172a;
+}
+
+.page-vacaciones .expediente-modal__encabezado p {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.page-vacaciones .expediente-cerrar {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #475569;
+    cursor: pointer;
+}
+
+.page-vacaciones .expediente-resumen {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.page-vacaciones .expediente-resumen div {
+    padding: 12px 14px;
+    border: 1px solid #edf2f7;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.page-vacaciones .expediente-resumen .es-principal {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+}
+
+.page-vacaciones .expediente-resumen strong {
+    display: block;
+    font-size: 18px;
+    color: #0f172a;
+}
+
+.page-vacaciones .expediente-resumen span {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.page-vacaciones .expediente-nota {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 13px;
+}
+
+.page-vacaciones .expediente-modal h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: #0f172a;
+}
+
+/* En la ventana los renglones no llevan a ningún lado */
+.page-vacaciones .expediente-tabla tbody tr {
+    cursor: default;
+}
+
+.page-vacaciones .expediente-vacio {
+    text-align: center;
+    color: #64748b;
+}
+
+.page-vacaciones .exp-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.page-vacaciones .exp-tag--ok { background: #dcfce7; color: #15803d; }
+.page-vacaciones .exp-tag--info { background: #e0e7ff; color: #3730a3; }
+.page-vacaciones .exp-tag--muted { background: #f1f5f9; color: #64748b; }
+
+.page-vacaciones .expediente-modal__acciones {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+    .page-vacaciones .expediente-resumen {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }

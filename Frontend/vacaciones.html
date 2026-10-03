@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="recursos/vacaciones.css">
     <!-- SheetJS: genera archivos de Excel (.xlsx) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <!-- Sesión y permisos por rol (antes que cualquier otro script) -->
+    <script src="recursos/sesion.js"></script>
 </head>
 
 <body class="page-vacaciones">
@@ -199,6 +201,40 @@
             </section>
         </section>
     </main>
+
+    <!-- Vacaciones del trabajador (se abre aquí, sin salir de la página) -->
+    <div class="expediente-modal hidden" id="expedienteModal" role="dialog" aria-modal="true" aria-labelledby="expedienteNombre">
+        <div class="expediente-modal__caja">
+            <header class="expediente-modal__encabezado">
+                <div class="expediente-avatar" id="expedienteAvatar"></div>
+                <div>
+                    <span class="expediente-eyebrow">Vacaciones del trabajador</span>
+                    <h3 id="expedienteNombre"></h3>
+                    <p id="expedienteDatos"></p>
+                </div>
+                <button class="expediente-cerrar" type="button" id="expedienteCerrar" aria-label="Cerrar">✕</button>
+            </header>
+            <div class="expediente-resumen" id="expedienteResumen"></div>
+            <p class="expediente-nota hidden" id="expedienteNota"></p>
+            <h4>Historial de vacaciones</h4>
+            <div class="table-responsive">
+                <table class="vacation-table expediente-tabla">
+                    <thead>
+                        <tr>
+                            <th>Periodo</th>
+                            <th>Días</th>
+                            <th>Regresa</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expedienteTabla"></tbody>
+                </table>
+            </div>
+            <div class="expediente-modal__acciones">
+                <button class="btn btn--primary" type="button" id="expedienteAceptar">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <div id="toast" class="toast" aria-live="polite"></div>
 
@@ -487,12 +523,79 @@
             renderSaldos();
         });
 
-        // Clic en cualquier renglón: abre el expediente del trabajador en Empleados
+        // =====================================================================
+        //  VACACIONES DEL TRABAJADOR (ventana en esta misma página)
+        // =====================================================================
+        const expedienteModal = document.getElementById('expedienteModal');
+        let elementoAnterior = null;
+
+        function abrirExpediente(empId) {
+            const emp = EMPLEADOS.find((e) => e.id === empId);
+            if (!emp) return;
+            const derecho = getVacationDaysForYear(antiguedadAnios(emp));
+            const tomados = vacacionesTomadas(emp, ANIO);
+            const enSolicitud = diasEnSolicitud(emp, ANIO);
+            const actual = vacacionEn(emp, HOY_ISO);
+            const incapacidad = incapacidadEn(emp, HOY_ISO);
+            // Estado de hoy: de vacaciones, incapacitado o trabajando
+            const hoy = actual ? [`Regresa el ${formatoFecha(fechaRegreso(actual.fin))}`, 'De vacaciones hoy']
+                : incapacidad ? [`Hasta el ${formatoFecha(finIncapacidad(incapacidad))}`, 'Incapacitado hoy']
+                    : ['Trabajando', 'Estado de hoy'];
+
+            document.getElementById('expedienteAvatar').textContent = emp.nombre.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+            document.getElementById('expedienteNombre').textContent = emp.nombre;
+            document.getElementById('expedienteDatos').textContent =
+                `ID ${emp.id} · ${emp.puesto === emp.depto ? emp.depto : `${emp.depto} · ${emp.puesto}`} · ${nombreSucursal(emp.suc)} · Ingresó el ${formatoFecha(emp.ingreso)}`;
+
+            const tarjeta = (valor, texto, clase = '') => `<div class="${clase}"><strong>${valor}</strong><span>${texto}</span></div>`;
+            document.getElementById('expedienteResumen').innerHTML =
+                tarjeta(derecho, `Días que le corresponden en ${ANIO}`) +
+                tarjeta(tomados, `Días tomados en ${ANIO}`) +
+                tarjeta(Math.max(0, derecho - tomados), 'Días disponibles', 'es-principal') +
+                tarjeta(hoy[0], hoy[1]);
+
+            const nota = document.getElementById('expedienteNota');
+            const notas = [];
+            if (!derecho) notas.push('Todavía no cumple un año de antigüedad, por eso no tiene días de vacaciones.');
+            if (enSolicitud) notas.push(`Tiene ${textoDias(enSolicitud)} en una solicitud que RH aún no resuelve.`);
+            nota.textContent = notas.join(' ');
+            nota.classList.toggle('hidden', !notas.length);
+
+            const vacaciones = [...(emp.vacaciones || [])].sort((a, b) => b.inicio.localeCompare(a.inicio));
+            const estado = (v) => v.fin < HOY_ISO
+                ? '<span class="exp-tag exp-tag--muted">Disfrutadas</span>'
+                : v.inicio <= HOY_ISO ? '<span class="exp-tag exp-tag--ok">En curso</span>' : '<span class="exp-tag exp-tag--info">Programadas</span>';
+            document.getElementById('expedienteTabla').innerHTML = vacaciones.length
+                ? vacaciones.map((v) => `<tr>
+                    <td>${periodoTexto(v.inicio, v.fin)}</td>
+                    <td>${textoDias(diasHabiles(v.inicio, v.fin))}</td>
+                    <td>${formatoFecha(fechaRegreso(v.fin))}</td>
+                    <td>${estado(v)}</td>
+                </tr>`).join('')
+                : '<tr><td colspan="4" class="expediente-vacio">Sin vacaciones registradas.</td></tr>';
+
+            elementoAnterior = document.activeElement;
+            expedienteModal.classList.remove('hidden');
+            document.getElementById('expedienteCerrar').focus();
+        }
+
+        function cerrarExpediente() {
+            expedienteModal.classList.add('hidden');
+            if (elementoAnterior) elementoAnterior.focus();
+        }
+
+        // Clic en cualquier renglón: muestra las vacaciones del trabajador aquí mismo
         document.querySelectorAll('#activeListBody, #vacationTableBody').forEach((tbody) => {
             tbody.addEventListener('click', (event) => {
                 const fila = event.target.closest('tr[data-id]');
-                if (fila) window.location.href = `empleados.html?id=${fila.dataset.id}`;
+                if (fila) abrirExpediente(fila.dataset.id);
             });
+        });
+        document.getElementById('expedienteCerrar').addEventListener('click', cerrarExpediente);
+        document.getElementById('expedienteAceptar').addEventListener('click', cerrarExpediente);
+        expedienteModal.addEventListener('click', (event) => { if (event.target === expedienteModal) cerrarExpediente(); });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !expedienteModal.classList.contains('hidden')) cerrarExpediente();
         });
 
         // La tarjeta lleva a la lista de vacaciones

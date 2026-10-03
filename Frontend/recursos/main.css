@@ -15,6 +15,17 @@
     --color-bg: #F8FAFC;
     --color-white: #FFFFFF;
 
+    /* ---- Un color por concepto, el mismo en todas las páginas ----
+       bg = fondo de la etiqueta · tx = texto · pt = punto, icono o barra */
+    --asistencia-bg: #dcfce7;  --asistencia-tx: #15803d;  --asistencia-pt: #22c55e;   /* verde: asistió, a tiempo, activo */
+    --retardo-bg: #fef3c7;     --retardo-tx: #b45309;     --retardo-pt: #f59e0b;      /* ámbar: retardo, salida temprana */
+    --falta-bg: #fee2e2;       --falta-tx: #b91c1c;       --falta-pt: #ef4444;        /* rojo: falta, falta administrativa */
+    --permiso-bg: #dbeafe;     --permiso-tx: #1d4ed8;     --permiso-pt: #3b82f6;      /* azul: permiso */
+    --vacaciones-bg: #ede9fe;  --vacaciones-tx: #6d28d9;  --vacaciones-pt: #8b5cf6;   /* morado: vacaciones */
+    --incapacidad-bg: #fce7f3; --incapacidad-tx: #be185d; --incapacidad-pt: #db2777;  /* rosa: incapacidad */
+    --descanso-bg: #f1f5f9;    --descanso-tx: #64748b;    --descanso-pt: #cbd5e1;     /* gris: descanso */
+    --baja-bg: #e2e8f0;        --baja-tx: #334155;                                    /* gris oscuro: baja */
+
     --radius: 10px;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
     --transition: all 0.25s ease;
@@ -132,4 +143,44 @@ input {
     margin-bottom: 0;
     font-weight: 400;
     cursor: pointer;
+}
+/* ===============================
+   COLORES POR CONCEPTO
+   Se usan sobre cualquier etiqueta, píldora o punto para que
+   vacaciones, incapacidad, permiso, etc. se vean igual en todo el sistema.
+================================ */
+.color-asistencia { background: var(--asistencia-bg) !important; color: var(--asistencia-tx) !important; }
+.color-retardo { background: var(--retardo-bg) !important; color: var(--retardo-tx) !important; }
+.color-falta { background: var(--falta-bg) !important; color: var(--falta-tx) !important; }
+.color-permiso { background: var(--permiso-bg) !important; color: var(--permiso-tx) !important; }
+.color-vacaciones { background: var(--vacaciones-bg) !important; color: var(--vacaciones-tx) !important; }
+.color-incapacidad { background: var(--incapacidad-bg) !important; color: var(--incapacidad-tx) !important; }
+.color-descanso { background: var(--descanso-bg) !important; color: var(--descanso-tx) !important; }
+.color-baja { background: var(--baja-bg) !important; color: var(--baja-tx) !important; }
+
+/* Cifras e iconos de las tarjetas */
+.kpi-card__value.asistencia { color: var(--asistencia-tx); }
+.kpi-card__value.retardo { color: var(--retardo-tx); }
+.kpi-card__value.falta { color: var(--falta-tx); }
+.kpi-card__value.permiso { color: var(--permiso-tx); }
+.kpi-card__value.vacaciones { color: var(--vacaciones-tx); }
+.kpi-card__value.incapacidad { color: var(--incapacidad-tx); }
+
+/* Sucursal del admin: texto fijo en lugar de lista desplegable */
+.sucursal-fija {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #252060;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sucursal-fija::before {
+    content: '📍';
+    font-size: 13px;
 }

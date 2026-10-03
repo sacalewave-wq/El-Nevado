@@ -144,6 +144,11 @@
     color: #16a34a;
 }
 
+.page-incapacidades .kpi-icon.incapacidad {
+    background: var(--incapacidad-bg);
+    color: var(--incapacidad-tx);
+}
+
 .page-incapacidades .kpi-icon.info {
     background: #eef2ff;
     color: #4338ca;
@@ -469,4 +474,198 @@
     border-radius: 12px;
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
     font-size: 14px;
+}
+
+/* ===============================
+   BUSCADOR JUNTO A LOS FILTROS
+================================ */
+.page-incapacidades .filter-row .search-box input {
+    width: 240px;
+    min-height: 42px;
+    background-color: #ffffff;
+}
+
+/* "Ver expediente" es un botón con aspecto de enlace */
+.page-incapacidades .action-cell button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #475569;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.page-incapacidades .action-cell button span {
+    font-weight: 500;
+}
+
+.page-incapacidades .action-cell button:hover {
+    color: #1e1b4b;
+}
+
+/* ===============================
+   EXPEDIENTE DE INCAPACIDADES
+================================ */
+.page-incapacidades .hidden {
+    display: none !important;
+}
+
+.page-incapacidades .expediente-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.5);
+}
+
+.page-incapacidades .expediente-modal__caja {
+    width: min(760px, 100%);
+    max-height: 100%;
+    overflow: auto;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+
+.page-incapacidades .expediente-modal__encabezado {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #edf2f7;
+}
+
+.page-incapacidades .expediente-modal__encabezado > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+}
+
+.page-incapacidades .expediente-avatar {
+    flex: none;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.page-incapacidades .expediente-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.page-incapacidades .expediente-modal__encabezado h3 {
+    margin: 2px 0;
+    font-size: 20px;
+    color: #0f172a;
+}
+
+.page-incapacidades .expediente-modal__encabezado p {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.page-incapacidades .expediente-cerrar {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #475569;
+    cursor: pointer;
+}
+
+.page-incapacidades .expediente-resumen {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.page-incapacidades .expediente-resumen div {
+    padding: 12px 14px;
+    border: 1px solid #edf2f7;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.page-incapacidades .expediente-resumen strong {
+    display: block;
+    font-size: 17px;
+    color: #0f172a;
+}
+
+.page-incapacidades .expediente-resumen span {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.page-incapacidades .expediente-modal h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: #0f172a;
+}
+
+/* La incapacidad desde la que se abrió el expediente */
+.page-incapacidades .expediente-tabla tr.es-seleccionada td {
+    background: #eef2ff;
+}
+
+.page-incapacidades .expediente-modal__acciones {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+    .page-incapacidades .expediente-resumen {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Con el buscador en la misma fila, los filtros van más compactos para que quepa "Exportar Excel" */
+.page-incapacidades .filter-row {
+    gap: 10px;
+}
+
+.page-incapacidades .filter-row label {
+    gap: 6px;
+}
+
+.page-incapacidades .filter-row .search-box input {
+    width: 205px;
+}
+
+.page-incapacidades .filter-row select {
+    min-width: 120px;
+    max-width: 175px;
+}
+
+.page-incapacidades .filter-row input[type="month"] {
+    min-width: 160px;
+}
+
+.page-incapacidades .filter-row .period-label {
+    gap: 6px;
+    padding: 0;
+}
+
+.page-incapacidades .sin-certificado {
+    font-size: 12.5px;
+    color: #94a3b8;
 }
